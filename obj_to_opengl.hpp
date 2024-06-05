@@ -20,4 +20,10 @@ bool parse_from_obj(const char* path,
     std::vector < float >& out_normals,
     std::vector <int>& number_vertex);
 
+bool another_parse_from_obj(const char* path,
+    std::vector < float >& out_vertices,
+    std::vector < float >& out_uvs,
+    std::vector < float >& out_normals,
+    std::vector <int>& number_vertex);
+
 #endif
