@@ -16,6 +16,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define GLM_FORCE_RADIANS
 
+//#define piesek //Nalezy odkomentowac, aby zmienic statek
+
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -43,10 +45,16 @@ ShaderProgram* sp;
 float speed_x = 0; //angular speed in radians
 float speed_y = 0; //angular speed in radians
 float speed_k = PI * 4;
-float speed_f = PI/45;
+float speed_f = PI / 45;
 float speed_p = 0;
 float speed_water = 8;
 float aspectRatio = 1;
+int kolysanie = 1;
+#ifdef piesek
+float speed_l = PI / 8;
+int stan = 0;
+int wioslowanie = 0;
+#endif
 //float angle_p = 0;
 //float angle_k = 0;
 glm::mat4 modelShip = glm::mat4(1.0f);
@@ -56,6 +64,9 @@ std::vector< float > uvs;
 std::vector< float > normals; // Won't be used at the moment.
 std::vector<int> number_vertex;
 
+#ifdef piesek
+	GLuint tex_s1, tex_s2, tex_s3, tex_s4, tex_s5, tex_s6, tex_s7, tex_s8, tex_s9, tex_s10, tex_s11, tex_s12, tex_s13, tex_s14;
+#endif
 GLuint texWater, texShip1, texShip2; //texture handle
 GLuint readTexture(const char* filename) {
 	GLuint tex;
@@ -93,23 +104,23 @@ void generateWater()
 	int r;
 	for (int i = 0; i < gridSize; i++) {
 		for (int j = 0; j < gridSize; j++) {
-			// Przyk³adowa funkcja falowa
-			heightMap[i * gridSize + j] = sin(0.1f *i)* cos(0.1f*j);
+			// PrzykÂ³adowa funkcja falowa
+			heightMap[i * gridSize + j] = sin(0.1f * i) * cos(0.1f * j);
 		}
 	}
 	water_vertices.clear();
 	water_textures.clear();
-	for (int i = 0; i < gridSize - 2; i+=2) {
+	for (int i = 0; i < gridSize - 2; i += 2) {
 		for (int j = 0; j < gridSize; ++j) {
-			// Wierzcho³ek (i, j)
+			// WierzchoÂ³ek (i, j)
 			water_vertices.push_back(i * gridSpacing);
 			water_vertices.push_back(heightMap[(i)*gridSize + j] * waveAmplitude);
 			water_vertices.push_back(j * gridSpacing);
 			water_vertices.push_back(1.0f);
 
-			// Wierzcho³ek (i+1, j)
+			// WierzchoÂ³ek (i+1, j)
 			water_vertices.push_back((i + 1) * gridSpacing);
-			water_vertices.push_back(heightMap[(i+1)*gridSize + j] * waveAmplitude);
+			water_vertices.push_back(heightMap[(i + 1) * gridSize + j] * waveAmplitude);
 			water_vertices.push_back(j * gridSpacing);
 			water_vertices.push_back(1.0f);
 
@@ -119,22 +130,22 @@ void generateWater()
 			water_textures.push_back(1 / (gridSize / 8.0) * (i + 1));
 			water_textures.push_back(1 / (gridSize / 8.0) * j);
 		}
-		//Generowanie w odwrotnej kolejnoœci, aby poprawiæ b³¹d
+		//Generowanie w odwrotnej kolejnoÅ“ci, aby poprawiÃ¦ bÂ³Â¹d
 		for (int j = gridSize; j > 0; --j) {
-			// Wierzcho³ek (i, j)
-			water_vertices.push_back((i+1)*gridSpacing);
-			water_vertices.push_back(heightMap[(i+1)*gridSize + j] * waveAmplitude);
+			// WierzchoÂ³ek (i, j)
+			water_vertices.push_back((i + 1) * gridSpacing);
+			water_vertices.push_back(heightMap[(i + 1) * gridSize + j] * waveAmplitude);
 			water_vertices.push_back(j * gridSpacing);
 			water_vertices.push_back(1.0f);
 
-			// Wierzcho³ek (i+1, j)
+			// WierzchoÂ³ek (i+1, j)
 			water_vertices.push_back((i + 2) * gridSpacing);
-			water_vertices.push_back(heightMap[(i+2)*gridSize + j] * waveAmplitude);
+			water_vertices.push_back(heightMap[(i + 2) * gridSize + j] * waveAmplitude);
 			water_vertices.push_back(j * gridSpacing);
 			water_vertices.push_back(1.0f);
 
 			// tekstura
-			water_textures.push_back(1 / (gridSize / 8.0) * (i+1));
+			water_textures.push_back(1 / (gridSize / 8.0) * (i + 1));
 			water_textures.push_back(1 / (gridSize / 8.0) * j);
 			water_textures.push_back(1 / (gridSize / 8.0) * (i + 2));
 			water_textures.push_back(1 / (gridSize / 8.0) * j);
@@ -146,8 +157,22 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 	if (action == GLFW_PRESS) {
 		if (key == GLFW_KEY_LEFT) speed_x -= PI / 8;
 		if (key == GLFW_KEY_RIGHT) speed_x += PI / 8;
-		if (key == GLFW_KEY_UP) speed_p += PI * 2;
-		if (key == GLFW_KEY_DOWN) speed_p -= PI * 2;
+		if (key == GLFW_KEY_UP)
+		{
+			speed_p += PI * 2;
+#ifdef piesek
+			wioslowanie = 1;
+			speed_p += PI * 98;
+#endif
+		}
+		if (key == GLFW_KEY_DOWN)
+		{
+			speed_p -= PI * 2;
+#ifdef piesek
+			wioslowanie = 1;
+			speed_p -= PI * 98;
+#endif
+		}
 		if (key == GLFW_KEY_W)
 		{
 			waveAmplitude = waveAmplitude + 0.1f;
@@ -160,14 +185,33 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 			generateWater();
 			//speed_f = speed_f + PI / 180;
 		}
+		if (key == GLFW_KEY_Z) kolysanie = !kolysanie;
+
+#ifdef piesek
+		if (key == GLFW_KEY_X) wioslowanie = !wioslowanie;
+#endif
 		if (waveAmplitude < 0.05f)waveAmplitude = 0.1f;
 		if (waveAmplitude > 1.95f) waveAmplitude = 2.0f;
 	}
 	if (action == GLFW_RELEASE) {
 		if (key == GLFW_KEY_LEFT) speed_x += PI / 8;
 		if (key == GLFW_KEY_RIGHT) speed_x -= PI / 8;
-		if (key == GLFW_KEY_UP) speed_p -= PI * 2;
-		if (key == GLFW_KEY_DOWN) speed_p += PI * 2;
+		if (key == GLFW_KEY_UP)
+		{
+			speed_p -= PI * 2;
+#ifdef piesek
+			wioslowanie = 0;
+			speed_p -= PI * 98;
+#endif
+		}
+		if (key == GLFW_KEY_DOWN)
+		{
+			speed_p += PI * 2;
+#ifdef piesek
+			wioslowanie = 0;
+			speed_p += PI * 98;
+#endif
+		}
 	}
 }
 
@@ -189,11 +233,33 @@ void initOpenGLProgram(GLFWwindow* window) {
 	texWater = readTexture("morze9.png");
 	texShip1 = readTexture("mat1_c.png");
 	texShip2 = readTexture("mat0_c.png");
+#ifdef piesek
+	tex_s1 = readTexture("T_Ship08_WoodPlain_01_Diffuse.png");
+	tex_s2 = readTexture("T_Ship08_Rope_02_Diffuse.png");
+	tex_s3 = readTexture("T_Ship08_Metal_Diffuse.png");
+	tex_s4 = readTexture("T_Ship08_WoodPlain_02_Diffuse.png");
+	tex_s5 = readTexture("T_Ship08_Planks_Diffuse.png");
+	tex_s6 = readTexture("T_Ship08_WoodPlain_03_Diffuse.png");
+	tex_s7 = readTexture("T_Ship08_Rope_01_Diffuse.png");
+	tex_s8 = readTexture("T_Ship08_Flag_Diffuse.png");
+	tex_s9 = readTexture("T_Ship08_Cannon_Diffuse.png");
+	tex_s10 = readTexture("T_Ship08_CannonSupport_Diffuse.png");
+	tex_s11 = readTexture("T_Ship08_CannonAxel_Diffuse.png");
+	tex_s12 = readTexture("T_Ship08_CannonWheels_Diffuse.png");
+	tex_s13 = readTexture("T_Ship08_CannonSides_Diffuse.png");
+	tex_s14 = readTexture("T_Ship08_CannonRope_Diffuse.png");
+	bool res = another_parse_from_obj("Ship08.obj", vertices, uvs, normals, number_vertex);
+	std::cout << "ended\n";
+	modelShip = glm::translate(modelShip, glm::vec3(0.0f, -4.3f, 20.0f));
+	modelShip = glm::scale(modelShip, glm::vec3(0.005f, 0.005f, 0.005f));
+#endif
+	generateWater();
+#ifndef piesek
 	bool res = parse_from_obj("drakkar.obj", vertices, uvs, normals, number_vertex);
 	std::cout << "ended\n";
-	generateWater();
 	modelShip = glm::scale(modelShip, glm::vec3(0.25f, 0.25f, 0.25f));
 	modelShip = glm::translate(modelShip, glm::vec3(0.0f, -22.0f, 100.0f));
+#endif
 	modelShip = glm::rotate(modelShip, PI / 2, glm::vec3(0.0f, 1.0f, 0.0f));
 }
 
@@ -205,6 +271,22 @@ void freeOpenGLProgram(GLFWwindow* window) {
 	glDeleteTextures(1, &texWater);
 	glDeleteTextures(1, &texShip1);
 	glDeleteTextures(1, &texShip2);
+#ifdef piesek
+	glDeleteTextures(1, &tex_s1);
+	glDeleteTextures(1, &tex_s2);
+	glDeleteTextures(1, &tex_s3);
+	glDeleteTextures(1, &tex_s4);
+	glDeleteTextures(1, &tex_s5);
+	glDeleteTextures(1, &tex_s6);
+	glDeleteTextures(1, &tex_s7);
+	glDeleteTextures(1, &tex_s8);
+	glDeleteTextures(1, &tex_s9);
+	glDeleteTextures(1, &tex_s10);
+	glDeleteTextures(1, &tex_s11);
+	glDeleteTextures(1, &tex_s12);
+	glDeleteTextures(1, &tex_s13);
+	glDeleteTextures(1, &tex_s14);
+#endif
 }
 
 void drawWater() {
@@ -227,7 +309,7 @@ void drawWater() {
 }
 
 //Drawing procedure
-void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, float angle_f,float angle_p,float wateroffset) {
+void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, float angle_f, float angle_p, float wateroffset, float angle_wioslo) {
 	//************Place any code here that draws something inside the window******************l
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -255,13 +337,47 @@ void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, 
 	Ms = glm::rotate(Ms, angle_x, glm::vec3(0.0f, 1.0f, 0.0f)); //Compute model matrix
 	Ms = glm::translate(Ms, glm::vec3(0.0f, 0.0f, angle_p));
 	modelShip = Ms;
-	Ms = glm::rotate(Ms, -speed_f, glm::vec3(1.0f, 0.0f, 0.0f));
-	Ms = glm::rotate(Ms, angle_f, glm::vec3(1.0f, 0.0f, 0.0f));
+
+	if (kolysanie)
+	{
+		Ms = glm::rotate(Ms, -speed_f, glm::vec3(1.0f, 0.0f, 0.0f));
+		Ms = glm::rotate(Ms, angle_f, glm::vec3(1.0f, 0.0f, 0.0f));
+	}
+
+#ifdef piesek
+	glm::mat4 Mo = Ms; //Mo=Macierz modelu oars (wiosel statku)
+	if (wioslowanie)
+	{
+		if (stan == 0)
+		{
+			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, 1.0f, 1.0f));
+		}
+		else if (stan == 1)
+		{
+			Mo = glm::rotate(Mo, PI / 16, glm::vec3(0.0f, 1.0f, 1.0f));
+			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, -1.0f, 1.0f));
+		}
+		else if (stan == 2)
+		{
+			Mo = glm::rotate(Mo, PI / 16, glm::vec3(0.0f, 1.0f, 1.0f));
+			Mo = glm::rotate(Mo, PI / 16, glm::vec3(0.0f, -1.0f, 1.0f));
+			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, -1.0f, -1.0f));
+		}
+		else
+		{
+			Mo = glm::rotate(Mo, PI / 16, glm::vec3(0.0f, 1.0f, 1.0f));
+			Mo = glm::rotate(Mo, PI / 16, glm::vec3(0.0f, -1.0f, 1.0f));
+			Mo = glm::rotate(Mo, PI / 16, glm::vec3(0.0f, -1.0f, -1.0f));
+			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, 1.0f, -1.0f));
+		}
+	}
+#endif
+
+#ifndef piesek
+
 	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Ms));
 
-
-
-	//czêœæ pierwsza statku
+	//czÃªÅ“Ã¦ pierwsza statku
 	glEnableVertexAttribArray(sp->a("vertex")); //Enable sending data to the attribute vertex
 	glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, false, 0, &vertices[0]); //Specify source of the data for the attribute vertex
 	glEnableVertexAttribArray(sp->a("normal")); //Enable sending data to the attribute vertex
@@ -279,11 +395,11 @@ void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, 
 
 
 
-	//czêœc druga statku
+	//czÃªÅ“c druga statku
 	glEnableVertexAttribArray(sp->a("vertex")); //Enable sending data to the attribute vertex
 	glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, false, 0, &vertices[number_vertex[0] * 4]); //Specify source of the data for the attribute vertex
 	glEnableVertexAttribArray(sp->a("normal")); //Enable sending data to the attribute vertex
-	glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, false, 0, &normals[number_vertex[0]*4]); //Specify source of the data for the attribute vertex
+	glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, false, 0, &normals[number_vertex[0] * 4]); //Specify source of the data for the attribute vertex
 	glEnableVertexAttribArray(sp->a("texCoord0"));
 	glVertexAttribPointer(sp->a("texCoord0"), 2, GL_FLOAT, false, 0, &uvs[number_vertex[0] * 2]);
 	glActiveTexture(GL_TEXTURE0);
@@ -295,7 +411,54 @@ void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, 
 	glDisableVertexAttribArray(sp->a("vertex")); //Disable sending data to the attribute vertex
 	glDisableVertexAttribArray(sp->a("normal"));
 
+#endif
 
+
+#ifdef piesek
+	int vertex_sum = 0;
+	GLuint textures[] = { tex_s1,tex_s2,tex_s3,tex_s4,tex_s5,tex_s6,tex_s7,tex_s8,tex_s9,tex_s10,tex_s11,tex_s12,tex_s13,tex_s14 };
+	
+	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Ms));
+
+	for (int j = 0; j < 14; j++)
+	{
+		glEnableVertexAttribArray(sp->a("vertex")); //Enable sending data to the attribute vertex
+		glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, false, 0, &vertices[vertex_sum * 4]); //Specify source of the data for the attribute vertex
+		glEnableVertexAttribArray(sp->a("normal")); //Enable sending data to the attribute vertex
+		glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, false, 0, &normals[vertex_sum * 4]); //Specify source of the data for the attribute vertex
+		glEnableVertexAttribArray(sp->a("texCoord0"));
+		glVertexAttribPointer(sp->a("texCoord0"), 2, GL_FLOAT, false, 0, &uvs[vertex_sum * 2]);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, textures[j]);
+		glUniform1i(sp->u("textureMap0"), 0);
+
+		glDrawArrays(GL_TRIANGLES, 0, number_vertex[j]); //Draw the object
+		glDisableVertexAttribArray(sp->a("texCoord0"));
+		glDisableVertexAttribArray(sp->a("vertex")); //Disable sending data to the attribute vertex
+		glDisableVertexAttribArray(sp->a("normal"));
+
+
+		vertex_sum = vertex_sum + number_vertex[j];
+	}
+
+	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Mo));
+
+	glEnableVertexAttribArray(sp->a("vertex")); //Enable sending data to the attribute vertex
+	glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, false, 0, &vertices[vertex_sum * 4]); //Specify source of the data for the attribute vertex
+	glEnableVertexAttribArray(sp->a("normal")); //Enable sending data to the attribute vertex
+	glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, false, 0, &normals[vertex_sum * 4]); //Specify source of the data for the attribute vertex
+	glEnableVertexAttribArray(sp->a("texCoord0"));
+	glVertexAttribPointer(sp->a("texCoord0"), 2, GL_FLOAT, false, 0, &uvs[vertex_sum * 2]);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, tex_s4);
+	glUniform1i(sp->u("textureMap0"), 0);
+
+	glDrawArrays(GL_TRIANGLES, 0, number_vertex[14]);
+	glDisableVertexAttribArray(sp->a("texCoord0"));
+	glDisableVertexAttribArray(sp->a("vertex")); //Disable sending data to the attribute vertex
+	glDisableVertexAttribArray(sp->a("normal"));
+
+#endif
 
 	glfwSwapBuffers(window); //Copy back buffer to front buffer
 }
@@ -340,6 +503,7 @@ int main(void)
 	float jakies_x = 1;
 	int jakies_y = 1;
 	float time = 0;
+	float angle_wioslo = 0;
 	glfwSetTime(0); //Zero the timer
 	//Main application loop
 	while (!glfwWindowShouldClose(window)) //As long as the window shouldnt be closed yet...
@@ -356,13 +520,13 @@ int main(void)
 			wateroffset -= gridSize / 4.0;
 			for (float& x : water_textures) x -= 0.5;
 		}
-		if (jakies_x > -1 && jakies_y==1)
+		if (jakies_x > -1 && jakies_y == 1)
 		{
 			jakies_x -= glfwGetTime();
 			angle_f += speed_f * glfwGetTime();
 			//std::cout << jakies_x << std::endl;
 		}
-		else if(jakies_x<=1)
+		else if (jakies_x <= 1)
 		{
 			jakies_y = 0;
 			jakies_x += glfwGetTime();
@@ -372,8 +536,30 @@ int main(void)
 				jakies_y = 1;
 			}
 		}
+
+#ifdef piesek
+		if (speed_p > 0 || wioslowanie)
+		{
+			if (angle_wioslo >= PI / 16) {
+				angle_wioslo = 0;
+				stan++;
+				stan = stan % 4;
+			}
+			angle_wioslo += speed_l * glfwGetTime();
+		}
+		if (speed_p < 0)
+		{
+			if (angle_wioslo <= PI / 16) {
+				angle_wioslo = 0;
+				stan++;
+				stan = stan % 4;
+			}
+			angle_wioslo -= speed_l * glfwGetTime();
+		}
+#endif
+
 		glfwSetTime(0); //Zero the timer
-		drawScene(window, angle_x, angle_y, angle_k, angle_f,angle_p,wateroffset); //Execute drawing procedure
+		drawScene(window, angle_x, angle_y, angle_k, angle_f, angle_p, wateroffset,angle_wioslo); //Execute drawing procedure
 		glfwPollEvents(); //Process callback procedures corresponding to the events that took place up to now
 	}
 	freeOpenGLProgram(window);
@@ -382,4 +568,3 @@ int main(void)
 	glfwTerminate(); //Free GLFW resources
 	exit(EXIT_SUCCESS);
 }
-
