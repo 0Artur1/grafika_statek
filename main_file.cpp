@@ -16,8 +16,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define GLM_FORCE_RADIANS
 
-//#define piesek //Nalezy odkomentowac, aby zmienic statek
-
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -45,18 +43,23 @@ ShaderProgram* sp;
 float speed_x = 0; //angular speed in radians
 float speed_y = 0; //angular speed in radians
 float speed_k = PI * 4;
-float speed_f = PI / 45;
+float speed_f = 0.5;
 float speed_p = 0;
+float speed_cx = 0;
+float angle_cx = 0;
+float speed_cy = 0;
+float angle_cy = 1;
 float speed_water = 8;
+float wateroffset = 0;
 float aspectRatio = 1;
+float pos_x = 100;
+float pos_y = 0;
+float pos_angle = 0;
 int kolysanie = 1;
-#ifdef piesek
 float speed_l = PI / 8;
 int stan = 0;
 int wioslowanie = 0;
-#endif
-//float angle_p = 0;
-//float angle_k = 0;
+
 glm::mat4 modelShip = glm::mat4(1.0f);
 
 std::vector< float > vertices;
@@ -64,9 +67,7 @@ std::vector< float > uvs;
 std::vector< float > normals; // Won't be used at the moment.
 std::vector<int> number_vertex;
 
-#ifdef piesek
 	GLuint tex_s1, tex_s2, tex_s3, tex_s4, tex_s5, tex_s6, tex_s7, tex_s8, tex_s9, tex_s10, tex_s11, tex_s12, tex_s13, tex_s14;
-#endif
 GLuint texWater, texShip1, texShip2; //texture handle
 GLuint readTexture(const char* filename) {
 	GLuint tex;
@@ -97,15 +98,12 @@ void error_callback(int error, const char* description) {
 	fputs(description, stderr);
 }
 
-
-
 void generateWater()
 {
-	int r;
 	for (int i = 0; i < gridSize; i++) {
 		for (int j = 0; j < gridSize; j++) {
 			// Przyk³adowa funkcja falowa
-			heightMap[i * gridSize + j] = sin(0.1f * i) * cos(0.1f * j);
+			heightMap[i * gridSize + j] = sin(0.1f * i) * cos(0.1f * j) * waveAmplitude;
 		}
 	}
 	water_vertices.clear();
@@ -114,13 +112,13 @@ void generateWater()
 		for (int j = 0; j < gridSize; ++j) {
 			// Wierzcho³ek (i, j)
 			water_vertices.push_back(i * gridSpacing);
-			water_vertices.push_back(heightMap[(i)*gridSize + j] * waveAmplitude);
+			water_vertices.push_back(heightMap[(i)*gridSize + j]);
 			water_vertices.push_back(j * gridSpacing);
 			water_vertices.push_back(1.0f);
 
 			// Wierzcho³ek (i+1, j)
 			water_vertices.push_back((i + 1) * gridSpacing);
-			water_vertices.push_back(heightMap[(i + 1) * gridSize + j] * waveAmplitude);
+			water_vertices.push_back(heightMap[(i + 1) * gridSize + j]);
 			water_vertices.push_back(j * gridSpacing);
 			water_vertices.push_back(1.0f);
 
@@ -134,13 +132,13 @@ void generateWater()
 		for (int j = gridSize; j > 0; --j) {
 			// Wierzcho³ek (i, j)
 			water_vertices.push_back((i + 1) * gridSpacing);
-			water_vertices.push_back(heightMap[(i + 1) * gridSize + j] * waveAmplitude);
+			water_vertices.push_back(heightMap[(i + 1) * gridSize + j] );
 			water_vertices.push_back(j * gridSpacing);
 			water_vertices.push_back(1.0f);
 
 			// Wierzcho³ek (i+1, j)
 			water_vertices.push_back((i + 2) * gridSpacing);
-			water_vertices.push_back(heightMap[(i + 2) * gridSize + j] * waveAmplitude);
+			water_vertices.push_back(heightMap[(i + 2) * gridSize + j]);
 			water_vertices.push_back(j * gridSpacing);
 			water_vertices.push_back(1.0f);
 
@@ -155,63 +153,73 @@ void generateWater()
 
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
 	if (action == GLFW_PRESS) {
-		if (key == GLFW_KEY_LEFT) speed_x -= PI / 8;
-		if (key == GLFW_KEY_RIGHT) speed_x += PI / 8;
+		if (key == GLFW_KEY_LEFT) speed_x = PI / 8 * 10;
+		if (key == GLFW_KEY_RIGHT) speed_x = -PI / 8 * 10;
 		if (key == GLFW_KEY_UP)
 		{
-			speed_p += PI * 2;
-#ifdef piesek
+			speed_p = PI * 200;
 			wioslowanie = 1;
-			speed_p += PI * 98;
-#endif
 		}
 		if (key == GLFW_KEY_DOWN)
 		{
-			speed_p -= PI * 2;
-#ifdef piesek
+			speed_p = -PI * 200;
 			wioslowanie = 1;
-			speed_p -= PI * 98;
-#endif
-		}
-		if (key == GLFW_KEY_W)
-		{
-			waveAmplitude = waveAmplitude + 0.1f;
-			generateWater();
-			//speed_f = speed_f + PI / 180;
-		}
-		if (key == GLFW_KEY_S)
-		{
-			waveAmplitude = waveAmplitude - 0.1f;
-			generateWater();
-			//speed_f = speed_f + PI / 180;
 		}
 		if (key == GLFW_KEY_Z) kolysanie = !kolysanie;
-
-#ifdef piesek
 		if (key == GLFW_KEY_X) wioslowanie = !wioslowanie;
-#endif
-		if (waveAmplitude < 0.05f)waveAmplitude = 0.1f;
-		if (waveAmplitude > 1.95f) waveAmplitude = 2.0f;
+		if (key == GLFW_KEY_A) speed_cx = PI / 2.0;
+		if (key == GLFW_KEY_D) speed_cx = -PI / 2.0;
+		if (key == GLFW_KEY_W) speed_cy = PI * 2.0;
+		if (key == GLFW_KEY_S) speed_cy = -PI * 2.0;
+		if (key == GLFW_KEY_O)
+		{
+			waveAmplitude = waveAmplitude + 0.1f;
+			if (waveAmplitude > 1.95f) waveAmplitude = 2.0f;
+
+			for (int i = 0; i < gridSize; i++) { // regenerate height map
+				for (int j = 0; j < gridSize; j++) {
+					// Przykładowa funkcja falowa
+					heightMap[i * gridSize + j] = sin(0.1f * i) * cos(0.1f * j) * waveAmplitude;
+				}
+			}
+
+			for (int x = 1; x < water_vertices.size(); x += 4) // modify current vertices list
+				water_vertices[x] = heightMap[int(water_vertices[x - 1] / gridSpacing) * gridSize + int(water_vertices[x + 1] / gridSpacing)];
+		}
+		if (key == GLFW_KEY_L)
+		{
+			waveAmplitude = waveAmplitude - 0.1f;
+			if (waveAmplitude < 0.05f)waveAmplitude = 0.1f;
+
+
+			for (int i = 0; i < gridSize; i++) { // regenerate height map
+				for (int j = 0; j < gridSize; j++) {
+					// Przykładowa funkcja falowa
+					heightMap[i * gridSize + j] = cos(0.1f * j) * waveAmplitude;
+				}
+			}
+
+			for (int x = 1; x < water_vertices.size(); x += 4) // modify current vertices list
+				water_vertices[x] = heightMap[int(water_vertices[x - 1] / gridSpacing) * gridSize + int(water_vertices[x + 1] / gridSpacing)];
+		}
 	}
 	if (action == GLFW_RELEASE) {
-		if (key == GLFW_KEY_LEFT) speed_x += PI / 8;
-		if (key == GLFW_KEY_RIGHT) speed_x -= PI / 8;
 		if (key == GLFW_KEY_UP)
 		{
-			speed_p -= PI * 2;
-#ifdef piesek
+			speed_p = 0;
 			wioslowanie = 0;
-			speed_p -= PI * 98;
-#endif
 		}
 		if (key == GLFW_KEY_DOWN)
 		{
-			speed_p += PI * 2;
-#ifdef piesek
+			speed_p = 0;
 			wioslowanie = 0;
-			speed_p += PI * 98;
-#endif
 		}
+		if (key == GLFW_KEY_LEFT) speed_x = 0;
+		if (key == GLFW_KEY_RIGHT) speed_x = 0;
+		if (key == GLFW_KEY_A) speed_cx = 0;
+		if (key == GLFW_KEY_D) speed_cx = 0;
+		if (key == GLFW_KEY_W) speed_cy = 0;
+		if (key == GLFW_KEY_S) speed_cy = 0;
 	}
 }
 
@@ -233,7 +241,7 @@ void initOpenGLProgram(GLFWwindow* window) {
 	texWater = readTexture("morze9.png");
 	texShip1 = readTexture("mat1_c.png");
 	texShip2 = readTexture("mat0_c.png");
-#ifdef piesek
+
 	tex_s1 = readTexture("T_Ship08_WoodPlain_01_Diffuse.png");
 	tex_s2 = readTexture("T_Ship08_Rope_02_Diffuse.png");
 	tex_s3 = readTexture("T_Ship08_Metal_Diffuse.png");
@@ -250,16 +258,9 @@ void initOpenGLProgram(GLFWwindow* window) {
 	tex_s14 = readTexture("T_Ship08_CannonRope_Diffuse.png");
 	bool res = another_parse_from_obj("Ship08.obj", vertices, uvs, normals, number_vertex);
 	std::cout << "ended\n";
-	modelShip = glm::translate(modelShip, glm::vec3(0.0f, -4.3f, 20.0f));
-	modelShip = glm::scale(modelShip, glm::vec3(0.005f, 0.005f, 0.005f));
-#endif
 	generateWater();
-#ifndef piesek
-	bool res = parse_from_obj("drakkar.obj", vertices, uvs, normals, number_vertex);
-	std::cout << "ended\n";
-	modelShip = glm::scale(modelShip, glm::vec3(0.25f, 0.25f, 0.25f));
-	modelShip = glm::translate(modelShip, glm::vec3(0.0f, -22.0f, 100.0f));
-#endif
+	modelShip = glm::scale(modelShip, glm::vec3(0.005f, 0.005f, 0.005f));
+	modelShip = glm::translate(modelShip, glm::vec3(0.0f, -4.3f * 200, 100.0f * 50));
 	modelShip = glm::rotate(modelShip, PI / 2, glm::vec3(0.0f, 1.0f, 0.0f));
 }
 
@@ -271,7 +272,7 @@ void freeOpenGLProgram(GLFWwindow* window) {
 	glDeleteTextures(1, &texWater);
 	glDeleteTextures(1, &texShip1);
 	glDeleteTextures(1, &texShip2);
-#ifdef piesek
+
 	glDeleteTextures(1, &tex_s1);
 	glDeleteTextures(1, &tex_s2);
 	glDeleteTextures(1, &tex_s3);
@@ -286,7 +287,6 @@ void freeOpenGLProgram(GLFWwindow* window) {
 	glDeleteTextures(1, &tex_s12);
 	glDeleteTextures(1, &tex_s13);
 	glDeleteTextures(1, &tex_s14);
-#endif
 }
 
 void drawWater() {
@@ -308,6 +308,16 @@ void drawWater() {
 	glDisableVertexAttribArray(sp->a("texCoord0"));
 }
 
+float detectOcean()
+{
+	float conv_x = pos_x; // -1600 -> 1600    0 - 1000 j
+	float conv_y = pos_y; // -1600 -> 1600    0 - 1000 i
+	conv_x = (-conv_x) / 159.0 * 50 + 500 + wateroffset / gridSpacing;
+	conv_y = (conv_y) / 159.0 * 50 + 500 + wateroffset / gridSpacing;
+	conv_y = -sin(0.1f * conv_y + 0.5) * cos(0.1f * conv_x + 0.5) * waveAmplitude;
+	return conv_y; // Snap ship position to the water level below its center point
+}
+
 //Drawing procedure
 void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, float angle_f, float angle_p, float wateroffset, float angle_wioslo) {
 	//************Place any code here that draws something inside the window******************l
@@ -315,10 +325,10 @@ void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	glm::mat4 V = glm::lookAt(
-		glm::vec3(0.0f, 1.0f, -5.0f),
-		glm::vec3(0.0f, 0.0f, 0.0f),
+		glm::vec3(0.0f, angle_cy, 0.0f),
+		glm::vec3(5.0f * sin(angle_cx), 0.0f, 5.0f * cos(angle_cx)),
 		glm::vec3(0.0f, 1.0f, 0.0f)); //compute view matrix
-	glm::mat4 P = glm::perspective(50.0f * PI / 180.0f, aspectRatio, 1.0f, 250.0f); //compute projection matrix
+	glm::mat4 P = glm::perspective(50.0f * PI / 180.0f, aspectRatio, 1.0f, 2500.0f); //compute projection matrix
 
 	sp->use();//activate shading program
 	//Send parameters to graphics card
@@ -337,14 +347,10 @@ void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, 
 	Ms = glm::rotate(Ms, angle_x, glm::vec3(0.0f, 1.0f, 0.0f)); //Compute model matrix
 	Ms = glm::translate(Ms, glm::vec3(0.0f, 0.0f, angle_p));
 	modelShip = Ms;
+	Ms = glm::translate(Ms, glm::vec3(0.0f, detectOcean() * 200, 0.0f));
 
-	if (kolysanie)
-	{
-		Ms = glm::rotate(Ms, -speed_f, glm::vec3(1.0f, 0.0f, 0.0f));
-		Ms = glm::rotate(Ms, angle_f, glm::vec3(1.0f, 0.0f, 0.0f));
-	}
+	if (kolysanie) Ms = glm::rotate(Ms, angle_f, glm::vec3(1.0f, 0.0f, 0.0f));
 
-#ifdef piesek
 	glm::mat4 Mo = Ms; //Mo=Macierz modelu oars (wiosel statku)
 	if (wioslowanie)
 	{
@@ -371,50 +377,7 @@ void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, 
 			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, 1.0f, -1.0f));
 		}
 	}
-#endif
 
-#ifndef piesek
-
-	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Ms));
-
-	//czêœæ pierwsza statku
-	glEnableVertexAttribArray(sp->a("vertex")); //Enable sending data to the attribute vertex
-	glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, false, 0, &vertices[0]); //Specify source of the data for the attribute vertex
-	glEnableVertexAttribArray(sp->a("normal")); //Enable sending data to the attribute vertex
-	glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, false, 0, &normals[0]); //Specify source of the data for the attribute vertex
-	glEnableVertexAttribArray(sp->a("texCoord0"));
-	glVertexAttribPointer(sp->a("texCoord0"), 2, GL_FLOAT, false, 0, &uvs[0]);
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, texShip2);
-	glUniform1i(sp->u("textureMap0"), 0);
-
-	glDrawArrays(GL_TRIANGLES, 0, number_vertex[0]); //Draw the object
-	glDisableVertexAttribArray(sp->a("texCoord0"));
-	glDisableVertexAttribArray(sp->a("vertex")); //Disable sending data to the attribute vertex
-	glDisableVertexAttribArray(sp->a("normal"));
-
-
-
-	//czêœc druga statku
-	glEnableVertexAttribArray(sp->a("vertex")); //Enable sending data to the attribute vertex
-	glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, false, 0, &vertices[number_vertex[0] * 4]); //Specify source of the data for the attribute vertex
-	glEnableVertexAttribArray(sp->a("normal")); //Enable sending data to the attribute vertex
-	glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, false, 0, &normals[number_vertex[0] * 4]); //Specify source of the data for the attribute vertex
-	glEnableVertexAttribArray(sp->a("texCoord0"));
-	glVertexAttribPointer(sp->a("texCoord0"), 2, GL_FLOAT, false, 0, &uvs[number_vertex[0] * 2]);
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, texShip1);
-	glUniform1i(sp->u("textureMap0"), 0);
-
-	glDrawArrays(GL_TRIANGLES, 0, number_vertex[1]);
-	glDisableVertexAttribArray(sp->a("texCoord0"));
-	glDisableVertexAttribArray(sp->a("vertex")); //Disable sending data to the attribute vertex
-	glDisableVertexAttribArray(sp->a("normal"));
-
-#endif
-
-
-#ifdef piesek
 	int vertex_sum = 0;
 	GLuint textures[] = { tex_s1,tex_s2,tex_s3,tex_s4,tex_s5,tex_s6,tex_s7,tex_s8,tex_s9,tex_s10,tex_s11,tex_s12,tex_s13,tex_s14 };
 	
@@ -458,8 +421,6 @@ void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, 
 	glDisableVertexAttribArray(sp->a("vertex")); //Disable sending data to the attribute vertex
 	glDisableVertexAttribArray(sp->a("normal"));
 
-#endif
-
 	glfwSwapBuffers(window); //Copy back buffer to front buffer
 }
 
@@ -499,9 +460,6 @@ int main(void)
 	float angle_k = 0;
 	float angle_f = 0;
 	float angle_p = 0;
-	float wateroffset = 0;
-	float jakies_x = 1;
-	int jakies_y = 1;
 	float time = 0;
 	float angle_wioslo = 0;
 	glfwSetTime(0); //Zero the timer
@@ -512,6 +470,11 @@ int main(void)
 		angle_y = speed_y * glfwGetTime(); //Add angle by which the object was rotated in the previous iteration
 		angle_k += speed_k * glfwGetTime();
 		angle_p = speed_p * glfwGetTime();
+		angle_cx += speed_cx * glfwGetTime();
+		angle_cy += speed_cy * glfwGetTime();
+		pos_angle += angle_x;
+		pos_x -= speed_p /50.0 * sin(pos_angle) * glfwGetTime();
+		pos_y -= speed_p /50.0 * cos(pos_angle) * glfwGetTime();
 		time = glfwGetTime();
 		wateroffset += speed_water * time;
 		time *= speed_water * 10.0 / gridSize;
@@ -520,24 +483,8 @@ int main(void)
 			wateroffset -= gridSize / 4.0;
 			for (float& x : water_textures) x -= 0.5;
 		}
-		if (jakies_x > -1 && jakies_y == 1)
-		{
-			jakies_x -= glfwGetTime();
-			angle_f += speed_f * glfwGetTime();
-			//std::cout << jakies_x << std::endl;
-		}
-		else if (jakies_x <= 1)
-		{
-			jakies_y = 0;
-			jakies_x += glfwGetTime();
-			angle_f -= speed_f * glfwGetTime();
-			//std::cout << jakies_x << std::endl;
-			if (jakies_x >= 1) {
-				jakies_y = 1;
-			}
-		}
+		angle_f += speed_f * glfwGetTime();
 
-#ifdef piesek
 		if (speed_p > 0 || wioslowanie)
 		{
 			if (angle_wioslo >= PI / 16) {
@@ -556,10 +503,9 @@ int main(void)
 			}
 			angle_wioslo -= speed_l * glfwGetTime();
 		}
-#endif
 
 		glfwSetTime(0); //Zero the timer
-		drawScene(window, angle_x, angle_y, angle_k, angle_f, angle_p, wateroffset,angle_wioslo); //Execute drawing procedure
+		drawScene(window, angle_x, angle_y, angle_k, sin(angle_f) / 9.0, angle_p, wateroffset,angle_wioslo); //Execute drawing procedure
 		glfwPollEvents(); //Process callback procedures corresponding to the events that took place up to now
 	}
 	freeOpenGLProgram(window);
