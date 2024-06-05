@@ -33,7 +33,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 const int gridSize = 1000; //Probably optimal amount for 30 fps
 const float gridSpacing = 0.8f;
-float waveAmplitude = 0.6f;
+float waveAmplitude = 0.4f;
 std::vector<float>water_textures;
 std::vector<float>water_vertices;
 std::vector<float> heightMap(gridSize* gridSize, 0.0f);
@@ -45,7 +45,7 @@ float speed_y = 0; //angular speed in radians
 float speed_k = PI * 4;
 float speed_f = PI/45;
 float speed_p = 0;
-float speed_water = 5;
+float speed_water = 8;
 float aspectRatio = 1;
 //float angle_p = 0;
 //float angle_k = 0;
@@ -71,8 +71,13 @@ GLuint readTexture(const char* filename) {
 	//Copy image to graphics cards memory represented by the active handle
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0,
 		GL_RGBA, GL_UNSIGNED_BYTE, (unsigned char*)image.data());
+	glGenerateMipmap(GL_TEXTURE_2D);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+		GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameterf(GL_TEXTURE_2D,
+		GL_TEXTURE_MAX_ANISOTROPY_EXT, 16.0f);
 	return tex;
 }
 
@@ -85,25 +90,26 @@ void error_callback(int error, const char* description) {
 
 void generateWater()
 {
-	for (int i = 0; i < gridSize; ++i) {
-		for (int j = 0; j < gridSize; ++j) {
+	int r;
+	for (int i = 0; i < gridSize; i++) {
+		for (int j = 0; j < gridSize; j++) {
 			// Przyk³adowa funkcja falowa
-			heightMap[i * gridSize + j] = (sin(0.1f * i) * cos(0.1f * j));
+			heightMap[i * gridSize + j] = sin(0.1f *i)* cos(0.1f*j);
 		}
 	}
 	water_vertices.clear();
 	water_textures.clear();
-	for (int i = 0; i < gridSize - 1; ++i) {
+	for (int i = 0; i < gridSize - 2; i+=2) {
 		for (int j = 0; j < gridSize; ++j) {
 			// Wierzcho³ek (i, j)
 			water_vertices.push_back(i * gridSpacing);
-			water_vertices.push_back(heightMap[i * gridSize + j] * waveAmplitude);
+			water_vertices.push_back(heightMap[(i)*gridSize + j] * waveAmplitude);
 			water_vertices.push_back(j * gridSpacing);
 			water_vertices.push_back(1.0f);
 
 			// Wierzcho³ek (i+1, j)
 			water_vertices.push_back((i + 1) * gridSpacing);
-			water_vertices.push_back(heightMap[(i + 1) * gridSize + j] * waveAmplitude);
+			water_vertices.push_back(heightMap[(i+1)*gridSize + j] * waveAmplitude);
 			water_vertices.push_back(j * gridSpacing);
 			water_vertices.push_back(1.0f);
 
@@ -111,6 +117,26 @@ void generateWater()
 			water_textures.push_back(1 / (gridSize / 8.0) * i);
 			water_textures.push_back(1 / (gridSize / 8.0) * j);
 			water_textures.push_back(1 / (gridSize / 8.0) * (i + 1));
+			water_textures.push_back(1 / (gridSize / 8.0) * j);
+		}
+		//Generowanie w odwrotnej kolejnoœci, aby poprawiæ b³¹d
+		for (int j = gridSize; j > 0; --j) {
+			// Wierzcho³ek (i, j)
+			water_vertices.push_back((i+1)*gridSpacing);
+			water_vertices.push_back(heightMap[(i+1)*gridSize + j] * waveAmplitude);
+			water_vertices.push_back(j * gridSpacing);
+			water_vertices.push_back(1.0f);
+
+			// Wierzcho³ek (i+1, j)
+			water_vertices.push_back((i + 2) * gridSpacing);
+			water_vertices.push_back(heightMap[(i+2)*gridSize + j] * waveAmplitude);
+			water_vertices.push_back(j * gridSpacing);
+			water_vertices.push_back(1.0f);
+
+			// tekstura
+			water_textures.push_back(1 / (gridSize / 8.0) * (i+1));
+			water_textures.push_back(1 / (gridSize / 8.0) * j);
+			water_textures.push_back(1 / (gridSize / 8.0) * (i + 2));
 			water_textures.push_back(1 / (gridSize / 8.0) * j);
 		}
 	}
@@ -163,11 +189,11 @@ void initOpenGLProgram(GLFWwindow* window) {
 	texWater = readTexture("morze9.png");
 	texShip1 = readTexture("mat1_c.png");
 	texShip2 = readTexture("mat0_c.png");
-	bool res = parse_from_obj("drakkar_ship.obj", vertices, uvs, normals, number_vertex);
+	bool res = parse_from_obj("drakkar.obj", vertices, uvs, normals, number_vertex);
 	std::cout << "ended\n";
 	generateWater();
 	modelShip = glm::scale(modelShip, glm::vec3(0.25f, 0.25f, 0.25f));
-	modelShip = glm::translate(modelShip, glm::vec3(0.0f, -21.5f, 100.0f));
+	modelShip = glm::translate(modelShip, glm::vec3(0.0f, -22.0f, 100.0f));
 	modelShip = glm::rotate(modelShip, PI / 2, glm::vec3(0.0f, 1.0f, 0.0f));
 }
 
@@ -177,6 +203,8 @@ void freeOpenGLProgram(GLFWwindow* window) {
 	//************Place any code here that needs to be executed once, after the main loop ends************
 	delete sp;
 	glDeleteTextures(1, &texWater);
+	glDeleteTextures(1, &texShip1);
+	glDeleteTextures(1, &texShip2);
 }
 
 void drawWater() {
