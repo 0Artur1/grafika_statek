@@ -59,6 +59,7 @@ int kolysanie = 1;
 float speed_l = PI / 8;
 int stan = 0;
 int wioslowanie = 0;
+float wioslo_height = PI / 12;
 
 glm::mat4 modelShip = glm::mat4(1.0f);
 
@@ -163,7 +164,7 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 		if (key == GLFW_KEY_DOWN)
 		{
 			speed_p = -PI * 200;
-			wioslowanie = 1;
+			wioslowanie = 2;
 		}
 		if (key == GLFW_KEY_Z) kolysanie = !kolysanie;
 		if (key == GLFW_KEY_X) wioslowanie = !wioslowanie;
@@ -352,29 +353,58 @@ void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, 
 	if (kolysanie) Ms = glm::rotate(Ms, angle_f, glm::vec3(1.0f, 0.0f, 0.0f));
 
 	glm::mat4 Mo = Ms; //Mo=Macierz modelu oars (wiosel statku)
-	if (wioslowanie)
+	if (wioslowanie==1)
 	{
+		Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, -1.0f, -1.0f));
+		Mo = glm::rotate(Mo, 2*wioslo_height/3, glm::vec3(0.0f, 1.0f, 0.0f));
 		if (stan == 0)
 		{
 			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, 1.0f, 1.0f));
 		}
 		else if (stan == 1)
 		{
-			Mo = glm::rotate(Mo, PI / 16, glm::vec3(0.0f, 1.0f, 1.0f));
+			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, 1.0f, 1.0f));
 			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, -1.0f, 1.0f));
 		}
 		else if (stan == 2)
 		{
-			Mo = glm::rotate(Mo, PI / 16, glm::vec3(0.0f, 1.0f, 1.0f));
-			Mo = glm::rotate(Mo, PI / 16, glm::vec3(0.0f, -1.0f, 1.0f));
+			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, 1.0f, 1.0f));
+			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, -1.0f, 1.0f));
 			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, -1.0f, -1.0f));
 		}
 		else
 		{
-			Mo = glm::rotate(Mo, PI / 16, glm::vec3(0.0f, 1.0f, 1.0f));
-			Mo = glm::rotate(Mo, PI / 16, glm::vec3(0.0f, -1.0f, 1.0f));
-			Mo = glm::rotate(Mo, PI / 16, glm::vec3(0.0f, -1.0f, -1.0f));
+			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, 1.0f, 1.0f));
+			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, -1.0f, 1.0f));
+			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, -1.0f, -1.0f));
 			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, 1.0f, -1.0f));
+		}
+	}
+	if (wioslowanie == 2)
+	{
+		Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, 1.0f, -1.0f));
+		Mo = glm::rotate(Mo, 2 * wioslo_height / 3, glm::vec3(0.0f, -1.0f, 0.0f));
+		if (stan == 0)
+		{
+			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, -1.0f, 1.0f));
+		}
+		else if (stan == 1)
+		{
+			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, -1.0f, 1.0f));
+			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, 1.0f, 1.0f));
+		}
+		else if (stan == 2)
+		{
+			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, -1.0f, 1.0f));
+			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, 1.0f, 1.0f));
+			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, 1.0f, -1.0f));
+		}
+		else
+		{
+			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, -1.0f, 1.0f));
+			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, 1.0f, 1.0f));
+			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, 1.0f, -1.0f));
+			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, -1.0f, -1.0f));
 		}
 	}
 
@@ -485,23 +515,19 @@ int main(void)
 		}
 		angle_f += speed_f * glfwGetTime();
 
-		if (speed_p > 0 || wioslowanie)
+		if (wioslowanie)
 		{
-			if (angle_wioslo >= PI / 16) {
-				angle_wioslo = 0;
-				stan++;
-				stan = stan % 4;
-			}
 			angle_wioslo += speed_l * glfwGetTime();
-		}
-		if (speed_p < 0)
-		{
-			if (angle_wioslo <= PI / 16) {
+			if (angle_wioslo >= wioslo_height) {
 				angle_wioslo = 0;
 				stan++;
 				stan = stan % 4;
 			}
-			angle_wioslo -= speed_l * glfwGetTime();
+		}
+		if (!wioslowanie)
+		{
+			angle_wioslo = 0;
+			stan = 0;
 		}
 
 		glfwSetTime(0); //Zero the timer
