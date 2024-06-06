@@ -31,11 +31,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "obj_to_opengl.hpp"
 
 
-const int gridSize = 1000; //Probably optimal amount for 30 fps
+const int gridSize = 500; //Probably optimal amount for 30 fps
+const int texRepeat = 8; // controls repeating the water texture
 const float gridSpacing = 0.8f;
 float waveAmplitude = 0.4f;
 std::vector<float>water_textures;
 std::vector<float>water_vertices;
+std::vector<float>water_normals;
 std::vector<float> heightMap(gridSize* gridSize, 0.0f);
 ShaderProgram* sp;
 
@@ -99,64 +101,109 @@ void error_callback(int error, const char* description) {
 	fputs(description, stderr);
 }
 
-void generateWater()
+glm::vec4 generateNormal(glm::vec3 p1, glm::vec3 p2, glm::vec3 p3)
 {
-	for (int i = 0; i < gridSize; i++) {
-		for (int j = 0; j < gridSize; j++) {
-			// Przyk³adowa funkcja falowa
-			heightMap[i * gridSize + j] = sin(0.1f * i) * cos(0.1f * j) * waveAmplitude;
+	glm::vec3 U = p2 - p1;
+	glm::vec3 V = p3 - p1;
+	return glm::vec4(U.y * V.z - U.z * V.y, U.z * V.x - U.x * V.z, U.x * V.y - U.y * V.x, 0.0f);
+}
+
+void generateWater(bool partial)
+{
+	glm::vec4 n;
+	glm::vec3 p1, p2, p3;
+
+	for (int i = 0; i < gridSize; i++) for (int j = 0; j < gridSize; j++) heightMap[i * gridSize + j] = sin(0.1f * i) * cos(0.1f * j) * waveAmplitude;
+	if (!partial) // should happen only upon program startup
+	{
+		water_vertices.clear();
+		water_textures.clear();
+		for (int i = 0; i < gridSize - 1; i += 1) {
+			for (int j = 0; j < gridSize - 1; ++j) { // each loop builds a square of 2 triangles
+				// point (i, j+1) (TRIANGLE 1) A
+				water_vertices.push_back(i * gridSpacing);
+				water_vertices.push_back(heightMap[(i)*gridSize + (j + 1)]);
+				water_vertices.push_back((j + 1) * gridSpacing);
+				water_vertices.push_back(1.0f);
+				// point (i+1, j) (TRIANGLE 1) B
+				water_vertices.push_back((i + 1) * gridSpacing);
+				water_vertices.push_back(heightMap[(i + 1) * gridSize + j]);
+				water_vertices.push_back(j * gridSpacing);
+				water_vertices.push_back(1.0f);
+				// point (i, j) (TRIANGLE 1) C
+				water_vertices.push_back(i * gridSpacing);
+				water_vertices.push_back(heightMap[(i)*gridSize + j]);
+				water_vertices.push_back(j * gridSpacing);
+				water_vertices.push_back(1.0f);
+				// point (i, j+1) (TRIANGLE 2) A
+				water_vertices.push_back(i * gridSpacing);
+				water_vertices.push_back(heightMap[(i)*gridSize + (j + 1)]);
+				water_vertices.push_back((j + 1) * gridSpacing);
+				water_vertices.push_back(1.0f);
+				// point (i+1, j+1) (TRIANGLE 2) D
+				water_vertices.push_back((i + 1) * gridSpacing);
+				water_vertices.push_back(heightMap[(i + 1) * gridSize + (j + 1)]);
+				water_vertices.push_back((j + 1) * gridSpacing);
+				water_vertices.push_back(1.0f);
+				// point (i+1, j) (TRIANGLE 2) B
+				water_vertices.push_back((i + 1) * gridSpacing);
+				water_vertices.push_back(heightMap[(i + 1) * gridSize + j]);
+				water_vertices.push_back(j * gridSpacing);
+				water_vertices.push_back(1.0f);
+				// texture coordinates for triangle 1, triangle 2: A B C, A D B
+				water_textures.push_back(1.0f / (gridSize / texRepeat) * i);
+				water_textures.push_back(1.0f / (gridSize / texRepeat) * (j + 1));
+				water_textures.push_back(1.0f / (gridSize / texRepeat) * (i + 1));
+				water_textures.push_back(1.0f / (gridSize / texRepeat) * j);
+				water_textures.push_back(1.0f / (gridSize / texRepeat) * i);
+				water_textures.push_back(1.0f / (gridSize / texRepeat) * j);
+				water_textures.push_back(1.0f / (gridSize / texRepeat) * i);
+				water_textures.push_back(1.0f / (gridSize / texRepeat) * (j + 1));
+				water_textures.push_back(1.0f / (gridSize / texRepeat) * (i + 1));
+				water_textures.push_back(1.0f / (gridSize / texRepeat) * (j + 1));
+				water_textures.push_back(1.0f / (gridSize / texRepeat) * (i + 1));
+				water_textures.push_back(1.0f / (gridSize / texRepeat) * j);
+			}
+		}
+		water_normals.clear();
+		p2 = glm::vec3(water_vertices[0], water_vertices[1], water_vertices[2]);
+		p3 = glm::vec3(water_vertices[4], water_vertices[5], water_vertices[6]);
+		for (int i = 0; i < water_vertices.size() - 8; i += 4) // generate normals for water
+		{
+			p1 = p2; // the triangle points behave like a queue, this speeds up generation
+			p2 = p3;
+			p3 = glm::vec3(water_vertices[i + 8], water_vertices[i + 9], water_vertices[i + 10]);
+			n = generateNormal(p1, p2, p3);
+			water_normals.push_back(n.x);
+			water_normals.push_back(n.y);
+			water_normals.push_back(n.z);
+			water_normals.push_back(n.w);
 		}
 	}
-	water_vertices.clear();
-	water_textures.clear();
-	for (int i = 0; i < gridSize - 2; i += 2) {
-		for (int j = 0; j < gridSize; ++j) {
-			// Wierzcho³ek (i, j)
-			water_vertices.push_back(i * gridSpacing);
-			water_vertices.push_back(heightMap[(i)*gridSize + j]);
-			water_vertices.push_back(j * gridSpacing);
-			water_vertices.push_back(1.0f);
-
-			// Wierzcho³ek (i+1, j)
-			water_vertices.push_back((i + 1) * gridSpacing);
-			water_vertices.push_back(heightMap[(i + 1) * gridSize + j]);
-			water_vertices.push_back(j * gridSpacing);
-			water_vertices.push_back(1.0f);
-
-			// tekstura
-			water_textures.push_back(1 / (gridSize / 8.0) * i);
-			water_textures.push_back(1 / (gridSize / 8.0) * j);
-			water_textures.push_back(1 / (gridSize / 8.0) * (i + 1));
-			water_textures.push_back(1 / (gridSize / 8.0) * j);
-		}
-		//Generowanie w odwrotnej kolejnoœci, aby poprawiæ b³¹d
-		for (int j = gridSize; j > 0; --j) {
-			// Wierzcho³ek (i, j)
-			water_vertices.push_back((i + 1) * gridSpacing);
-			water_vertices.push_back(heightMap[(i + 1) * gridSize + j] );
-			water_vertices.push_back(j * gridSpacing);
-			water_vertices.push_back(1.0f);
-
-			// Wierzcho³ek (i+1, j)
-			water_vertices.push_back((i + 2) * gridSpacing);
-			water_vertices.push_back(heightMap[(i + 2) * gridSize + j]);
-			water_vertices.push_back(j * gridSpacing);
-			water_vertices.push_back(1.0f);
-
-			// tekstura
-			water_textures.push_back(1 / (gridSize / 8.0) * (i + 1));
-			water_textures.push_back(1 / (gridSize / 8.0) * j);
-			water_textures.push_back(1 / (gridSize / 8.0) * (i + 2));
-			water_textures.push_back(1 / (gridSize / 8.0) * j);
+	else
+	{
+		for (int x = 1; x < water_vertices.size(); x += 4) // modify current vertices list
+			water_vertices[x] = heightMap[int(water_vertices[x - 1] / gridSpacing) * gridSize + int(water_vertices[x + 1] / gridSpacing)];
+		p2 = glm::vec3(water_vertices[0], water_vertices[1], water_vertices[2]);
+		p3 = glm::vec3(water_vertices[4], water_vertices[5], water_vertices[6]);
+		for (int i = 0; i < water_vertices.size() - 8; i += 4) // modify normals for water
+		{
+			p1 = p2;
+			p2 = p3;
+			p3 = glm::vec3(water_vertices[i + 8], water_vertices[i + 9], water_vertices[i + 10]);
+			n = generateNormal(p1, p2, p3);
+			water_normals[i] = n.x;
+			water_normals[i + 1] = n.y;
+			water_normals[i + 2] = n.z; // n.w is not needed
 		}
 	}
 }
 
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
 	if (action == GLFW_PRESS) {
-		if (key == GLFW_KEY_LEFT) speed_x = PI / 8 * 10;
-		if (key == GLFW_KEY_RIGHT) speed_x = -PI / 8 * 10;
-		if (key == GLFW_KEY_UP)
+		if (key == GLFW_KEY_LEFT) speed_x = PI / 8 * 4; // turn around
+		if (key == GLFW_KEY_RIGHT) speed_x = -PI / 8 * 4;
+		if (key == GLFW_KEY_UP) // oar animation, move
 		{
 			speed_p = PI * 200;
 			wioslowanie = 1;
@@ -166,42 +213,33 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 			speed_p = -PI * 200;
 			wioslowanie = 2;
 		}
-		if (key == GLFW_KEY_Z) kolysanie = !kolysanie;
+		if (key == GLFW_KEY_Z) kolysanie = !kolysanie; // toggle animation
 		if (key == GLFW_KEY_X) wioslowanie = !wioslowanie;
-		if (key == GLFW_KEY_A) speed_cx = PI / 2.0;
+		if (key == GLFW_KEY_A) speed_cx = PI / 2.0; // camera rotation
 		if (key == GLFW_KEY_D) speed_cx = -PI / 2.0;
-		if (key == GLFW_KEY_W) speed_cy = PI * 2.0;
+		if (key == GLFW_KEY_W) speed_cy = PI * 2.0; // raise or lower camera
 		if (key == GLFW_KEY_S) speed_cy = -PI * 2.0;
-		if (key == GLFW_KEY_O)
+		if (key == GLFW_KEY_O) // change water amplitude
 		{
-			waveAmplitude = waveAmplitude + 0.1f;
+			waveAmplitude += 0.1f;
 			if (waveAmplitude > 1.95f) waveAmplitude = 2.0f;
-
-			for (int i = 0; i < gridSize; i++) { // regenerate height map
-				for (int j = 0; j < gridSize; j++) {
-					// Przykładowa funkcja falowa
-					heightMap[i * gridSize + j] = sin(0.1f * i) * cos(0.1f * j) * waveAmplitude;
-				}
-			}
-
-			for (int x = 1; x < water_vertices.size(); x += 4) // modify current vertices list
-				water_vertices[x] = heightMap[int(water_vertices[x - 1] / gridSpacing) * gridSize + int(water_vertices[x + 1] / gridSpacing)];
+			generateWater(true);
 		}
 		if (key == GLFW_KEY_L)
 		{
-			waveAmplitude = waveAmplitude - 0.1f;
-			if (waveAmplitude < 0.05f)waveAmplitude = 0.1f;
-
-
-			for (int i = 0; i < gridSize; i++) { // regenerate height map
-				for (int j = 0; j < gridSize; j++) {
-					// Przykładowa funkcja falowa
-					heightMap[i * gridSize + j] = cos(0.1f * j) * waveAmplitude;
-				}
-			}
-
-			for (int x = 1; x < water_vertices.size(); x += 4) // modify current vertices list
-				water_vertices[x] = heightMap[int(water_vertices[x - 1] / gridSpacing) * gridSize + int(water_vertices[x + 1] / gridSpacing)];
+			waveAmplitude -= 0.1f;
+			if (waveAmplitude < 0.05f) waveAmplitude = 0.1f;
+			generateWater(true);
+		}
+		if (key == GLFW_KEY_I) // water speed
+		{
+			speed_water += 1.0f;
+			if (speed_water > 40.0f) speed_water = 40.0f;
+		}
+		if (key == GLFW_KEY_K)
+		{
+			speed_water -= 1.0f;
+			if (speed_water < 1.0f) speed_water = 1.0f;
 		}
 	}
 	if (action == GLFW_RELEASE) {
@@ -240,9 +278,6 @@ void initOpenGLProgram(GLFWwindow* window) {
 	glfwSetKeyCallback(window, keyCallback);
 	sp = new ShaderProgram("v_simplest.glsl", NULL, "f_simplest.glsl");
 	texWater = readTexture("morze9.png");
-	texShip1 = readTexture("mat1_c.png");
-	texShip2 = readTexture("mat0_c.png");
-
 	tex_s1 = readTexture("T_Ship08_WoodPlain_01_Diffuse.png");
 	tex_s2 = readTexture("T_Ship08_Rope_02_Diffuse.png");
 	tex_s3 = readTexture("T_Ship08_Metal_Diffuse.png");
@@ -257,12 +292,12 @@ void initOpenGLProgram(GLFWwindow* window) {
 	tex_s12 = readTexture("T_Ship08_CannonWheels_Diffuse.png");
 	tex_s13 = readTexture("T_Ship08_CannonSides_Diffuse.png");
 	tex_s14 = readTexture("T_Ship08_CannonRope_Diffuse.png");
-	bool res = another_parse_from_obj("Ship08.obj", vertices, uvs, normals, number_vertex);
+	bool res = another_parse_from_obj("Ship08.obj", vertices, uvs, normals, number_vertex); // ship model
 	std::cout << "ended\n";
-	generateWater();
 	modelShip = glm::scale(modelShip, glm::vec3(0.005f, 0.005f, 0.005f));
 	modelShip = glm::translate(modelShip, glm::vec3(0.0f, -4.3f * 200, 100.0f * 50));
 	modelShip = glm::rotate(modelShip, PI / 2, glm::vec3(0.0f, 1.0f, 0.0f));
+	generateWater(false);
 }
 
 
@@ -271,9 +306,6 @@ void freeOpenGLProgram(GLFWwindow* window) {
 	//************Place any code here that needs to be executed once, after the main loop ends************
 	delete sp;
 	glDeleteTextures(1, &texWater);
-	glDeleteTextures(1, &texShip1);
-	glDeleteTextures(1, &texShip2);
-
 	glDeleteTextures(1, &tex_s1);
 	glDeleteTextures(1, &tex_s2);
 	glDeleteTextures(1, &tex_s3);
@@ -291,22 +323,20 @@ void freeOpenGLProgram(GLFWwindow* window) {
 }
 
 void drawWater() {
-	//sp->use();
-
 	glEnableVertexAttribArray(sp->a("vertex"));
 	glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, GL_FALSE, 0, &water_vertices[0]);
-
+	glEnableVertexAttribArray(sp->a("normal"));
+	glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, GL_FALSE, 0, &water_normals[0]);
 	glEnableVertexAttribArray(sp->a("texCoord0"));
 	glVertexAttribPointer(sp->a("texCoord0"), 2, GL_FLOAT, false, 0, &water_textures[0]);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, texWater);
-
 	glUniform1i(sp->u("textureMap0"), 0);
 
-	glDrawArrays(GL_TRIANGLE_STRIP, 0, water_vertices.size() / 4);
-
-	glDisableVertexAttribArray(sp->a("vertex"));
+	glDrawArrays(GL_TRIANGLES, 0, water_vertices.size() / 4);
 	glDisableVertexAttribArray(sp->a("texCoord0"));
+	glDisableVertexAttribArray(sp->a("vertex"));
+	glDisableVertexAttribArray(sp->a("normal"));
 }
 
 float detectOcean()
@@ -327,9 +357,9 @@ void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, 
 
 	glm::mat4 V = glm::lookAt(
 		glm::vec3(0.0f, angle_cy, 0.0f),
-		glm::vec3(5.0f * sin(angle_cx), 0.0f, 5.0f * cos(angle_cx)),
+		glm::vec3(5.0f * sin(angle_cx), angle_cy > 0.0f ? 0.0f : angle_cy * 0.9, 5.0f * cos(angle_cx)),
 		glm::vec3(0.0f, 1.0f, 0.0f)); //compute view matrix
-	glm::mat4 P = glm::perspective(50.0f * PI / 180.0f, aspectRatio, 1.0f, 2500.0f); //compute projection matrix
+	glm::mat4 P = glm::perspective(50.0f * PI / 180.0f, aspectRatio, 1.0f, 140.0f); //compute projection matrix
 
 	sp->use();//activate shading program
 	//Send parameters to graphics card
@@ -339,6 +369,15 @@ void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, 
 	glm::mat4 M = glm::mat4(1.0f);
 	glm::mat4 Mw = glm::translate(M, glm::vec3(wateroffset - gridSize * gridSpacing * 0.5, -5.0f, wateroffset - gridSize * gridSpacing * 0.5));
 	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Mw));
+
+	// light parameters
+	glUniform4f(sp->u("lp1"), 0.0f, 100.0f, 0.0f, 1.0f); // position
+	glUniform4f(sp->u("lp2"), 50.0f, 20.0f, 50.0f, 1.0f);
+	glUniform1i(sp->u("lpow1"), 50); // the light's Phong coefficient
+	glUniform1i(sp->u("lpow2"), 250);
+	glUniform4f(sp->u("ks1"), 1.0f, 1.0f, 1.0f, 1.0f); // reflection color
+	glUniform4f(sp->u("ks2"), 1.0f, 1.0f, 0.5f, 1.0f);
+
 
 	drawWater();
 
@@ -353,10 +392,10 @@ void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, 
 	if (kolysanie) Ms = glm::rotate(Ms, angle_f, glm::vec3(1.0f, 0.0f, 0.0f));
 
 	glm::mat4 Mo = Ms; //Mo=Macierz modelu oars (wiosel statku)
-	if (wioslowanie==1)
+	if (wioslowanie == 1)
 	{
 		Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, -1.0f, -1.0f));
-		Mo = glm::rotate(Mo, 2*wioslo_height/3, glm::vec3(0.0f, 1.0f, 0.0f));
+		Mo = glm::rotate(Mo, 2 * wioslo_height / 3, glm::vec3(0.0f, 1.0f, 0.0f));
 		if (stan == 0)
 		{
 			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, 1.0f, 1.0f));
@@ -502,16 +541,17 @@ int main(void)
 		angle_p = speed_p * glfwGetTime();
 		angle_cx += speed_cx * glfwGetTime();
 		angle_cy += speed_cy * glfwGetTime();
+		if (angle_cy < -3) angle_cy = -3;
 		pos_angle += angle_x;
 		pos_x -= speed_p /50.0 * sin(pos_angle) * glfwGetTime();
 		pos_y -= speed_p /50.0 * cos(pos_angle) * glfwGetTime();
 		time = glfwGetTime();
 		wateroffset += speed_water * time;
-		time *= speed_water * 10.0 / gridSize;
+		time *= speed_water * 9.5 / gridSize;
 		for (float& x : water_textures) x += time;
-		while (wateroffset > gridSize / 8.0) {
-			wateroffset -= gridSize / 4.0;
-			for (float& x : water_textures) x -= 0.5;
+		while (wateroffset > gridSize / 40.0) {
+			wateroffset -= gridSize / 20.0;
+			for (float& x : water_textures) x -= 0.504;
 		}
 		angle_f += speed_f * glfwGetTime();
 
