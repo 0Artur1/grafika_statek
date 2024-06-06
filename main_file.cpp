@@ -62,7 +62,7 @@ float speed_l = PI / 8;
 int stan = 0;
 int wioslowanie = 0;
 float wioslo_height = PI / 12;
-float speed_gora;
+float speed_gora = PI/45;
 
 glm::mat4 modelShip = glm::mat4(1.0f);
 glm::mat4 modelLighthouse = glm::mat4(1.0f);
@@ -223,8 +223,8 @@ void generateWater(bool partial)
 
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
 	if (action == GLFW_PRESS) {
-		if (key == GLFW_KEY_LEFT) speed_x = PI / 8 * 4; // turn around
-		if (key == GLFW_KEY_RIGHT) speed_x = -PI / 8 * 4;
+		if (key == GLFW_KEY_LEFT) speed_x = PI / 8 ; // turn around
+		if (key == GLFW_KEY_RIGHT) speed_x = -PI / 8 ;
 		if (key == GLFW_KEY_UP) // oar animation, move
 		{
 			speed_p = PI * 200;
@@ -232,11 +232,13 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 		}
 		if (key == GLFW_KEY_DOWN)
 		{
-			speed_p = -PI * 200;
+			speed_p = -PI * 100;
 			wioslowanie = 2;
 		}
-		if (key == GLFW_KEY_Z) kolysanie = ~kolysanie; // toggle animation
-		if (key == GLFW_KEY_X) wioslowanie = ~wioslowanie;
+		if (key == GLFW_KEY_Z) kolysanie = !kolysanie; // toggle animation
+		if (key == GLFW_KEY_X) wioslowanie = wioslowanie = 1;
+		if (key == GLFW_KEY_C) wioslowanie = wioslowanie = 2;
+		if (key == GLFW_KEY_V) wioslowanie = wioslowanie = 0;
 		if (key == GLFW_KEY_A) speed_cx = PI / 2.0; // camera rotation
 		if (key == GLFW_KEY_D) speed_cx = -PI / 2.0;
 		if (key == GLFW_KEY_W) speed_cy = PI * 2.0; // raise or lower camera
@@ -485,7 +487,7 @@ void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, 
 
 	int vertex_sum = 0;
 	GLuint textures[] = { tex_s1,tex_s2,tex_s3,tex_s4,tex_s5,tex_s6,tex_s7,tex_s8,tex_s9,tex_s10,tex_s11,tex_s12,tex_s13,tex_s14 };
-	
+
 	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Ms));
 
 	for (int j = 0; j < 14; j++)
@@ -555,8 +557,8 @@ void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, 
 	glm::mat4 Mg = M;
 	Mg = glm::translate(Mg, glm::vec3(15.0f, -9.0f, 30.0f));
 	Mg = glm::scale(Mg, glm::vec3(8.0f, 8.0f, 8.0f));
+	Mg = glm::translate(Mg, glm::vec3(-angle_gora / 4, 0.0f, angle_gora / 2));
 	Mg = glm::rotate(Mg, angle_gora, glm::vec3(0.0f, 1.0f, 0.0f));
-	Mg = glm::translate(Mg, glm::vec3(-angle_gora / 4, 0.0f, -angle_gora / 2));
 	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Mg));
 
 	glEnableVertexAttribArray(sp->a("vertex")); //Enable sending data to the attribute vertex
@@ -578,8 +580,8 @@ void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, 
 	glm::mat4 Mg2 = M;
 	Mg2 = glm::translate(Mg2, glm::vec3(40.0f, -9.0f, 50.0f));
 	Mg2 = glm::scale(Mg2, glm::vec3(8.0f, 8.0f, 8.0f));
+	Mg2 = glm::translate(Mg2, glm::vec3(-angle_gora / 4, 0.0f, angle_gora / 2));
 	Mg2 = glm::rotate(Mg2, angle_gora, glm::vec3(0.0f, 1.0f, 0.0f));
-	Mg2 = glm::translate(Mg2, glm::vec3(-angle_gora / 4, 0.0f, -angle_gora / 2));
 	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Mg2));
 
 	glEnableVertexAttribArray(sp->a("vertex")); //Enable sending data to the attribute vertex
@@ -700,8 +702,8 @@ int main(void)
 		if (angle_cy < -3) angle_cy = -3;
 		if (angle_cy > 132) angle_cy = 132;
 		pos_angle += angle_x;
-		pos_x -= speed_p /50.0 * sin(pos_angle) * glfwGetTime();
-		pos_y -= speed_p /50.0 * cos(pos_angle) * glfwGetTime();
+		pos_x -= speed_p / 50.0 * sin(pos_angle) * glfwGetTime();
+		pos_y -= speed_p / 50.0 * cos(pos_angle) * glfwGetTime();
 		time = glfwGetTime();
 		wateroffset += speed_water * time;
 		time *= speed_water * 9.5 / gridSize;
@@ -728,7 +730,7 @@ int main(void)
 		}
 
 		glfwSetTime(0); //Zero the timer
-		drawScene(window, angle_x, angle_y, angle_k, sin(angle_f) / 9.0, angle_p, wateroffset,angle_wioslo,angle_gora); //Execute drawing procedure
+		drawScene(window, angle_x, angle_y, angle_k, sin(angle_f) / 9.0, angle_p, wateroffset, angle_wioslo, angle_gora); //Execute drawing procedure
 		glfwPollEvents(); //Process callback procedures corresponding to the events that took place up to now
 	}
 	freeOpenGLProgram(window);
