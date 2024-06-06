@@ -62,16 +62,23 @@ float speed_l = PI / 8;
 int stan = 0;
 int wioslowanie = 0;
 float wioslo_height = PI / 12;
+float test;
 
 glm::mat4 modelShip = glm::mat4(1.0f);
+glm::mat4 modelLighthouse = glm::mat4(1.0f);
 
 std::vector< float > vertices;
 std::vector< float > uvs;
-std::vector< float > normals; // Won't be used at the moment.
+std::vector< float > normals;
 std::vector<int> number_vertex;
 
+std::vector< float > LHvertices;
+std::vector< float > LHuvs;
+std::vector< float > LHnormals;
+std::vector<int> LHnumber_vertex;
+
 	GLuint tex_s1, tex_s2, tex_s3, tex_s4, tex_s5, tex_s6, tex_s7, tex_s8, tex_s9, tex_s10, tex_s11, tex_s12, tex_s13, tex_s14;
-GLuint texWater, texShip1, texShip2; //texture handle
+GLuint texWater, texShip1, texShip2, texLighthouse; //texture handle
 GLuint readTexture(const char* filename) {
 	GLuint tex;
 	glActiveTexture(GL_TEXTURE0);
@@ -219,6 +226,7 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 		if (key == GLFW_KEY_D) speed_cx = -PI / 2.0;
 		if (key == GLFW_KEY_W) speed_cy = PI * 2.0; // raise or lower camera
 		if (key == GLFW_KEY_S) speed_cy = -PI * 2.0;
+		if (key == GLFW_KEY_B) test += 1;
 		if (key == GLFW_KEY_O) // change water amplitude
 		{
 			waveAmplitude += 0.1f;
@@ -272,6 +280,7 @@ void windowResizeCallback(GLFWwindow* window, int width, int height) {
 //Initialization code procedure
 void initOpenGLProgram(GLFWwindow* window) {
 	//************Place any code here that needs to be executed once, at the program start************
+	bool res;
 	glClearColor(1, 1, 1, 1);
 	glEnable(GL_DEPTH_TEST);
 	glfwSetWindowSizeCallback(window, windowResizeCallback);
@@ -292,11 +301,15 @@ void initOpenGLProgram(GLFWwindow* window) {
 	tex_s12 = readTexture("T_Ship08_CannonWheels_Diffuse.png");
 	tex_s13 = readTexture("T_Ship08_CannonSides_Diffuse.png");
 	tex_s14 = readTexture("T_Ship08_CannonRope_Diffuse.png");
-	bool res = another_parse_from_obj("Ship08.obj", vertices, uvs, normals, number_vertex); // ship model
+	texLighthouse = readTexture("lighthouse_DefaultMaterial_BaseColor.png");
+	res = another_parse_from_obj("Ship08.obj", vertices, uvs, normals, number_vertex); // ship model
 	std::cout << "ended\n";
 	modelShip = glm::scale(modelShip, glm::vec3(0.005f, 0.005f, 0.005f));
 	modelShip = glm::translate(modelShip, glm::vec3(0.0f, -4.3f * 200, 100.0f * 50));
 	modelShip = glm::rotate(modelShip, PI / 2, glm::vec3(0.0f, 1.0f, 0.0f));
+	res = parse_lighthouse("lighthouse.obj", LHvertices, LHuvs, LHnormals, LHnumber_vertex); // lighthouse model
+	modelLighthouse = glm::scale(modelLighthouse, glm::vec3(0.5f, 0.5f, 0.5f));
+	modelLighthouse = glm::translate(modelLighthouse, glm::vec3(40.0f, -14.0f, 160.0f));
 	generateWater(false);
 }
 
@@ -372,7 +385,7 @@ void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, 
 
 	// light parameters
 	glUniform4f(sp->u("lp1"), 0.0f, 100.0f, 0.0f, 1.0f); // position
-	glUniform4f(sp->u("lp2"), 50.0f, 20.0f, 50.0f, 1.0f);
+	glUniform4f(sp->u("lp2"), 20.0f, 12.0f, 80.0f, 1.0f);
 	glUniform1i(sp->u("lpow1"), 50); // the light's Phong coefficient
 	glUniform1i(sp->u("lpow2"), 250);
 	glUniform4f(sp->u("ks1"), 1.0f, 1.0f, 1.0f, 1.0f); // reflection color
@@ -489,6 +502,33 @@ void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, 
 	glDisableVertexAttribArray(sp->a("texCoord0"));
 	glDisableVertexAttribArray(sp->a("vertex")); //Disable sending data to the attribute vertex
 	glDisableVertexAttribArray(sp->a("normal"));
+
+
+
+
+
+	glm::mat4 Ml = modelLighthouse;
+
+	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Ml)); // lighthouse
+
+	glEnableVertexAttribArray(sp->a("vertex")); //Enable sending data to the attribute vertex
+	glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, false, 0, &LHvertices[0]); //Specify source of the data for the attribute vertex
+	glEnableVertexAttribArray(sp->a("normal")); //Enable sending data to the attribute vertex
+	glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, false, 0, &LHnormals[0]); //Specify source of the data for the attribute vertex
+	glEnableVertexAttribArray(sp->a("texCoord0"));
+	glVertexAttribPointer(sp->a("texCoord0"), 2, GL_FLOAT, false, 0, &LHuvs[0]);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, texLighthouse);
+	glUniform1i(sp->u("textureMap0"), 0);
+
+	glDrawArrays(GL_TRIANGLES, 0, LHnumber_vertex[0]);
+	glDisableVertexAttribArray(sp->a("texCoord0"));
+	glDisableVertexAttribArray(sp->a("vertex")); //Disable sending data to the attribute vertex
+	glDisableVertexAttribArray(sp->a("normal"));
+
+
+
+
 
 	glfwSwapBuffers(window); //Copy back buffer to front buffer
 }
