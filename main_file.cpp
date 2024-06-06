@@ -62,8 +62,7 @@ float speed_l = PI / 8;
 int stan = 0;
 int wioslowanie = 0;
 float wioslo_height = PI / 12;
-float test;
-float speed_gora = PI / 45;
+float speed_gora;
 
 glm::mat4 modelShip = glm::mat4(1.0f);
 glm::mat4 modelLighthouse = glm::mat4(1.0f);
@@ -77,6 +76,11 @@ std::vector< float > LHvertices;
 std::vector< float > LHuvs;
 std::vector< float > LHnormals;
 std::vector<int> LHnumber_vertex;
+
+std::vector< float > DRvertices;
+std::vector< float > DRuvs;
+std::vector< float > DRnormals;
+std::vector<int> DRnumber_vertex;
 
 std::vector< float > vertices_gora;
 std::vector< float > uvs_gora;
@@ -231,13 +235,12 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 			speed_p = -PI * 200;
 			wioslowanie = 2;
 		}
-		if (key == GLFW_KEY_Z) kolysanie = !kolysanie; // toggle animation
-		if (key == GLFW_KEY_X) wioslowanie = !wioslowanie;
+		if (key == GLFW_KEY_Z) kolysanie = ~kolysanie; // toggle animation
+		if (key == GLFW_KEY_X) wioslowanie = ~wioslowanie;
 		if (key == GLFW_KEY_A) speed_cx = PI / 2.0; // camera rotation
 		if (key == GLFW_KEY_D) speed_cx = -PI / 2.0;
 		if (key == GLFW_KEY_W) speed_cy = PI * 2.0; // raise or lower camera
 		if (key == GLFW_KEY_S) speed_cy = -PI * 2.0;
-		if (key == GLFW_KEY_B) test += 1;
 		if (key == GLFW_KEY_O) // change water amplitude
 		{
 			waveAmplitude += 0.1f;
@@ -292,7 +295,7 @@ void windowResizeCallback(GLFWwindow* window, int width, int height) {
 void initOpenGLProgram(GLFWwindow* window) {
 	//************Place any code here that needs to be executed once, at the program start************
 	bool res;
-	glClearColor(0.56, 0.92, 1, 1);
+	glClearColor(0.6, 0.8, 1, 1);
 	glEnable(GL_DEPTH_TEST);
 	glfwSetWindowSizeCallback(window, windowResizeCallback);
 	glfwSetKeyCallback(window, keyCallback);
@@ -316,7 +319,6 @@ void initOpenGLProgram(GLFWwindow* window) {
 	tex_gora = readTexture("gora.png");
 	tex_chmura = readTexture("chmura.png");
 	res = another_parse_from_obj("Ship08.obj", vertices, uvs, normals, number_vertex); // ship model
-	std::cout << "ended\n";
 	modelShip = glm::scale(modelShip, glm::vec3(0.005f, 0.005f, 0.005f));
 	modelShip = glm::translate(modelShip, glm::vec3(0.0f, -4.3f * 200, 100.0f * 50));
 	modelShip = glm::rotate(modelShip, PI / 2, glm::vec3(0.0f, 1.0f, 0.0f));
@@ -326,6 +328,7 @@ void initOpenGLProgram(GLFWwindow* window) {
 	res = parse_from_obj("gora_lodowa.obj", vertices_gora, uvs_gora, normals_gora, number_vertex_gora);
 	bool res2 = parse_from_obj("Clouds.obj", vertices_chmura, uvs_chmura, normals_chmura, number_vertex_chmura);
 	generateWater(false);
+	std::cout << "Init complete\n";
 }
 
 
@@ -348,6 +351,9 @@ void freeOpenGLProgram(GLFWwindow* window) {
 	glDeleteTextures(1, &tex_s12);
 	glDeleteTextures(1, &tex_s13);
 	glDeleteTextures(1, &tex_s14);
+	glDeleteTextures(1, &texShip1);
+	glDeleteTextures(1, &texShip2);
+	glDeleteTextures(1, &texLighthouse);
 	glDeleteTextures(1, &tex_gora);
 	glDeleteTextures(1, &tex_chmura);
 }
@@ -380,7 +386,7 @@ float detectOcean()
 }
 
 //Drawing procedure
-void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, float angle_f, float angle_p, float wateroffset, float angle_wioslo,float angle_gora) {
+void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, float angle_f, float angle_p, float wateroffset, float angle_wioslo, float angle_gora) {
 	//************Place any code here that draws something inside the window******************l
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -401,9 +407,9 @@ void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, 
 	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Mw));
 
 	// light parameters
-	glUniform4f(sp->u("lp1"), 0.0f, 30.0f, 0.0f, 1.0f); // position
+	glUniform4f(sp->u("lp1"), 0.0f, 50.0f, 0.0f, 1.0f); // position
 	glUniform4f(sp->u("lp2"), 20.0f, 12.0f, 80.0f, 1.0f);
-	glUniform1i(sp->u("lpow1"), 50); // the light's Phong coefficient
+	glUniform1i(sp->u("lpow1"), 25); // the light's Phong coefficient
 	glUniform1i(sp->u("lpow2"), 250);
 	glUniform4f(sp->u("ks1"), 1.0f, 1.0f, 1.0f, 1.0f); // reflection color
 	glUniform4f(sp->u("ks2"), 1.0f, 1.0f, 0.5f, 1.0f);
@@ -479,7 +485,7 @@ void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, 
 
 	int vertex_sum = 0;
 	GLuint textures[] = { tex_s1,tex_s2,tex_s3,tex_s4,tex_s5,tex_s6,tex_s7,tex_s8,tex_s9,tex_s10,tex_s11,tex_s12,tex_s13,tex_s14 };
-
+	
 	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Ms));
 
 	for (int j = 0; j < 14; j++)
@@ -542,6 +548,8 @@ void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, 
 	glDisableVertexAttribArray(sp->a("texCoord0"));
 	glDisableVertexAttribArray(sp->a("vertex")); //Disable sending data to the attribute vertex
 	glDisableVertexAttribArray(sp->a("normal"));
+
+
 
 
 	glm::mat4 Mg = M;
@@ -633,6 +641,9 @@ void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, 
 	glDisableVertexAttribArray(sp->a("vertex")); //Disable sending data to the attribute vertex
 	glDisableVertexAttribArray(sp->a("normal"));
 
+
+
+
 	glfwSwapBuffers(window); //Copy back buffer to front buffer
 }
 
@@ -687,9 +698,10 @@ int main(void)
 		angle_cx += speed_cx * glfwGetTime();
 		angle_cy += speed_cy * glfwGetTime();
 		if (angle_cy < -3) angle_cy = -3;
+		if (angle_cy > 132) angle_cy = 132;
 		pos_angle += angle_x;
-		pos_x -= speed_p / 50.0 * sin(pos_angle) * glfwGetTime();
-		pos_y -= speed_p / 50.0 * cos(pos_angle) * glfwGetTime();
+		pos_x -= speed_p /50.0 * sin(pos_angle) * glfwGetTime();
+		pos_y -= speed_p /50.0 * cos(pos_angle) * glfwGetTime();
 		time = glfwGetTime();
 		wateroffset += speed_water * time;
 		time *= speed_water * 9.5 / gridSize;
@@ -716,7 +728,7 @@ int main(void)
 		}
 
 		glfwSetTime(0); //Zero the timer
-		drawScene(window, angle_x, angle_y, angle_k, sin(angle_f) / 9.0, angle_p, wateroffset, angle_wioslo,angle_gora); //Execute drawing procedure
+		drawScene(window, angle_x, angle_y, angle_k, sin(angle_f) / 9.0, angle_p, wateroffset,angle_wioslo,angle_gora); //Execute drawing procedure
 		glfwPollEvents(); //Process callback procedures corresponding to the events that took place up to now
 	}
 	freeOpenGLProgram(window);
