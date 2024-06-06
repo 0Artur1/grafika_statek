@@ -129,9 +129,9 @@ bool parse_from_obj(const char* path,
             fscanf(file, "%s\n", &zmienna);
             if (strcmp(zmienna, "VikingBoat_Mat1") == 0)
             {
-                texture_number = 1;
+                texture_number = 2;
             }
-            else texture_number = 2;
+            else texture_number = 1;
         }
         else if (strcmp(lineHeader, "v") == 0) {
             glm::vec3 vertex;
