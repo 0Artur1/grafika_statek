@@ -1,4 +1,10 @@
 /*
+Grafika Komputerowa i Wizualizacja
+Projekt: Statek
+Wykonali: Kewin Jankowski 156025, Artur Strzelecki 155294
+*/
+
+/*
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
@@ -26,74 +32,78 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "constants.h"
 #include "lodepng.h"
 #include "shaderprogram.h"
-#include "myCube.h"
-#include "myTeapot.h"
 #include "obj_to_opengl.hpp"
 
 
+const float renderDistance = 140.0f;
 const int gridSize = 500; //Probably optimal amount for 30 fps
 const int texRepeat = 8; // controls repeating the water texture
-const float gridSpacing = 0.8f;
+const float gridSpacing = 0.8f; // water triangle grid spacing
+const float shipAccel = 200.0f;
+const float shipDecel = 100.0f;
 float waveAmplitude = 0.4f;
-std::vector<float>water_textures;
-std::vector<float>water_vertices;
-std::vector<float>water_normals;
-std::vector<float> heightMap(gridSize* gridSize, 0.0f);
+std::vector<float>waterUvs;
+std::vector<float>waterVertices;
+std::vector<float>waterNormals;
+std::vector<float>heightMap(gridSize* gridSize, 0.0f);
 ShaderProgram* sp;
 
 
-float speed_x = 0; //angular speed in radians
-float speed_y = 0; //angular speed in radians
-float speed_k = PI * 4;
-float speed_f = 0.5;
-float speed_p = 0;
-float speed_cx = 0;
-float angle_cx = 0;
-float speed_cy = 0;
-float angle_cy = 1;
-float speed_water = 8;
-float wateroffset = 0;
+float shipRotateSpeed = 0; //ship x angular speed in radians
+float shipSwaySpeed = 0.5; // ship sway
+float shipMoveSpeed = 0.0f; // ship forward/backward motion
+float cameraRotateSpeed = 0; // camera x axis speed
+float cameraRotateAngle = 0; // camera x axis angle
+float cameraMoveSpeed = 0; // camera y axis speed
+float cameraMovePosition = 1; // camera y axis position
+float waterSpeed = 8; // water movement speed
+float waterOffset = 0; // water position offset (illusion of animation)
 float aspectRatio = 1;
-float pos_x = 100;
-float pos_y = 0;
-float pos_angle = 0;
-int kolysanie = 1;
-float speed_l = PI / 8;
-int stan = 0;
-int wioslowanie = 0;
-float wioslo_height = PI / 12;
-float speed_gora = PI/45;
+float shipTrackX = 100; // ship x position for detectOcean tracking
+float shipTrackY = 0; // ship y position for detectOcean tracking
+float shipTrackAngle = 0; // ship angle for detectOcean tracking
+int shipSwayAnimate = 1; // ship sway bool
+float oarAnimSpeed = 0; // oar animation speed
+int oarAnimState = 0; // oar animation state
+int oarAnimate = 1; // oar animation bool
+float oarLoopTarget = PI / 12; // oar height
+float icebergSpeed = PI / 45; // iceberg speed
+int isMoving = 0;
+int isTurning = 0;
+float icebergAngle[4] = { 0.0f, PI / 3, -PI / 2.5, PI * 6 / 5.0 };
+float cloudAngle[5] = { 0.4 * PI, 0.8 * PI, 1.2 * PI, 1.6 * PI, 2 * PI};
+float cloudSpeed[5] = { 0.05f, 0.04f, 0.056f, 0.043f, 0.06f};
 
 glm::mat4 modelShip = glm::mat4(1.0f);
 glm::mat4 modelLighthouse = glm::mat4(1.0f);
 
-std::vector< float > vertices;
-std::vector< float > uvs;
-std::vector< float > normals;
-std::vector<int> number_vertex;
+std::vector< float > shipVertices;
+std::vector< float > shipUvs;
+std::vector< float > shipNormals;
+std::vector<int> shipNumber_vertex;
 
-std::vector< float > LHvertices;
-std::vector< float > LHuvs;
-std::vector< float > LHnormals;
-std::vector<int> LHnumber_vertex;
+std::vector< float > lighthouseVertices;
+std::vector< float > lighthouseUvs;
+std::vector< float > lighthouseNormals;
+std::vector<int> lighthouseNumber_vertex;
 
-std::vector< float > DRvertices;
-std::vector< float > DRuvs;
-std::vector< float > DRnormals;
-std::vector<int> DRnumber_vertex;
+std::vector< float > drVertices;
+std::vector< float > drUvs;
+std::vector< float > drNormals;
+std::vector<int> drNumber_vertex;
 
-std::vector< float > vertices_gora;
-std::vector< float > uvs_gora;
-std::vector< float > normals_gora; // Won't be used at the moment.
-std::vector<int> number_vertex_gora;
+std::vector< float > icebergVertices;
+std::vector< float > icebergUvs;
+std::vector< float > icebergNormals; // Won't be used at the moment.
+std::vector<int> icebergNumber_vertex;
 
-std::vector< float > vertices_chmura;
-std::vector< float > uvs_chmura;
-std::vector< float > normals_chmura; // Won't be used at the moment.
-std::vector<int> number_vertex_chmura;
+std::vector< float > cloudVertices;
+std::vector< float > cloudUvs;
+std::vector< float > cloudNormals; // Won't be used at the moment.
+std::vector<int> cloudNumber_vertex;
 
 GLuint tex_s1, tex_s2, tex_s3, tex_s4, tex_s5, tex_s6, tex_s7, tex_s8, tex_s9, tex_s10, tex_s11, tex_s12, tex_s13, tex_s14;
-GLuint texWater, texShip1, texShip2, texLighthouse, tex_gora, tex_chmura; //texture handle
+GLuint tex_water, tex_lighthouse, tex_iceberg, tex_cloud; //texture handle
 GLuint readTexture(const char* filename) {
 	GLuint tex;
 	glActiveTexture(GL_TEXTURE0);
@@ -138,111 +148,109 @@ void generateWater(bool partial)
 	for (int i = 0; i < gridSize; i++) for (int j = 0; j < gridSize; j++) heightMap[i * gridSize + j] = sin(0.1f * i) * cos(0.1f * j) * waveAmplitude;
 	if (!partial) // should happen only upon program startup
 	{
-		water_vertices.clear();
-		water_textures.clear();
+		waterVertices.clear();
+		waterUvs.clear();
 		for (int i = 0; i < gridSize - 1; i += 1) {
 			for (int j = 0; j < gridSize - 1; ++j) { // each loop builds a square of 2 triangles
 				// point (i, j+1) (TRIANGLE 1) A
-				water_vertices.push_back(i * gridSpacing);
-				water_vertices.push_back(heightMap[(i)*gridSize + (j + 1)]);
-				water_vertices.push_back((j + 1) * gridSpacing);
-				water_vertices.push_back(1.0f);
+				waterVertices.push_back(i * gridSpacing);
+				waterVertices.push_back(heightMap[(i)*gridSize + (j + 1)]);
+				waterVertices.push_back((j + 1) * gridSpacing);
+				waterVertices.push_back(1.0f);
 				// point (i+1, j) (TRIANGLE 1) B
-				water_vertices.push_back((i + 1) * gridSpacing);
-				water_vertices.push_back(heightMap[(i + 1) * gridSize + j]);
-				water_vertices.push_back(j * gridSpacing);
-				water_vertices.push_back(1.0f);
+				waterVertices.push_back((i + 1) * gridSpacing);
+				waterVertices.push_back(heightMap[(i + 1) * gridSize + j]);
+				waterVertices.push_back(j * gridSpacing);
+				waterVertices.push_back(1.0f);
 				// point (i, j) (TRIANGLE 1) C
-				water_vertices.push_back(i * gridSpacing);
-				water_vertices.push_back(heightMap[(i)*gridSize + j]);
-				water_vertices.push_back(j * gridSpacing);
-				water_vertices.push_back(1.0f);
+				waterVertices.push_back(i * gridSpacing);
+				waterVertices.push_back(heightMap[(i)*gridSize + j]);
+				waterVertices.push_back(j * gridSpacing);
+				waterVertices.push_back(1.0f);
 				// point (i, j+1) (TRIANGLE 2) A
-				water_vertices.push_back(i * gridSpacing);
-				water_vertices.push_back(heightMap[(i)*gridSize + (j + 1)]);
-				water_vertices.push_back((j + 1) * gridSpacing);
-				water_vertices.push_back(1.0f);
+				waterVertices.push_back(i * gridSpacing);
+				waterVertices.push_back(heightMap[(i)*gridSize + (j + 1)]);
+				waterVertices.push_back((j + 1) * gridSpacing);
+				waterVertices.push_back(1.0f);
 				// point (i+1, j+1) (TRIANGLE 2) D
-				water_vertices.push_back((i + 1) * gridSpacing);
-				water_vertices.push_back(heightMap[(i + 1) * gridSize + (j + 1)]);
-				water_vertices.push_back((j + 1) * gridSpacing);
-				water_vertices.push_back(1.0f);
+				waterVertices.push_back((i + 1) * gridSpacing);
+				waterVertices.push_back(heightMap[(i + 1) * gridSize + (j + 1)]);
+				waterVertices.push_back((j + 1) * gridSpacing);
+				waterVertices.push_back(1.0f);
 				// point (i+1, j) (TRIANGLE 2) B
-				water_vertices.push_back((i + 1) * gridSpacing);
-				water_vertices.push_back(heightMap[(i + 1) * gridSize + j]);
-				water_vertices.push_back(j * gridSpacing);
-				water_vertices.push_back(1.0f);
+				waterVertices.push_back((i + 1) * gridSpacing);
+				waterVertices.push_back(heightMap[(i + 1) * gridSize + j]);
+				waterVertices.push_back(j * gridSpacing);
+				waterVertices.push_back(1.0f);
 				// texture coordinates for triangle 1, triangle 2: A B C, A D B
-				water_textures.push_back(1.0f / (gridSize / texRepeat) * i);
-				water_textures.push_back(1.0f / (gridSize / texRepeat) * (j + 1));
-				water_textures.push_back(1.0f / (gridSize / texRepeat) * (i + 1));
-				water_textures.push_back(1.0f / (gridSize / texRepeat) * j);
-				water_textures.push_back(1.0f / (gridSize / texRepeat) * i);
-				water_textures.push_back(1.0f / (gridSize / texRepeat) * j);
-				water_textures.push_back(1.0f / (gridSize / texRepeat) * i);
-				water_textures.push_back(1.0f / (gridSize / texRepeat) * (j + 1));
-				water_textures.push_back(1.0f / (gridSize / texRepeat) * (i + 1));
-				water_textures.push_back(1.0f / (gridSize / texRepeat) * (j + 1));
-				water_textures.push_back(1.0f / (gridSize / texRepeat) * (i + 1));
-				water_textures.push_back(1.0f / (gridSize / texRepeat) * j);
+				waterUvs.push_back(1.0f / (gridSize / texRepeat) * i);
+				waterUvs.push_back(1.0f / (gridSize / texRepeat) * (j + 1));
+				waterUvs.push_back(1.0f / (gridSize / texRepeat) * (i + 1));
+				waterUvs.push_back(1.0f / (gridSize / texRepeat) * j);
+				waterUvs.push_back(1.0f / (gridSize / texRepeat) * i);
+				waterUvs.push_back(1.0f / (gridSize / texRepeat) * j);
+				waterUvs.push_back(1.0f / (gridSize / texRepeat) * i);
+				waterUvs.push_back(1.0f / (gridSize / texRepeat) * (j + 1));
+				waterUvs.push_back(1.0f / (gridSize / texRepeat) * (i + 1));
+				waterUvs.push_back(1.0f / (gridSize / texRepeat) * (j + 1));
+				waterUvs.push_back(1.0f / (gridSize / texRepeat) * (i + 1));
+				waterUvs.push_back(1.0f / (gridSize / texRepeat) * j);
 			}
 		}
-		water_normals.clear();
-		p2 = glm::vec3(water_vertices[0], water_vertices[1], water_vertices[2]);
-		p3 = glm::vec3(water_vertices[4], water_vertices[5], water_vertices[6]);
-		for (int i = 0; i < water_vertices.size() - 8; i += 4) // generate normals for water
+		waterNormals.clear();
+		p2 = glm::vec3(waterVertices[0], waterVertices[1], waterVertices[2]);
+		p3 = glm::vec3(waterVertices[4], waterVertices[5], waterVertices[6]);
+		for (int i = 0; i < waterVertices.size() - 8; i += 4) // generate normals for water
 		{
 			p1 = p2; // the triangle points behave like a queue, this speeds up generation
 			p2 = p3;
-			p3 = glm::vec3(water_vertices[i + 8], water_vertices[i + 9], water_vertices[i + 10]);
+			p3 = glm::vec3(waterVertices[i + 8], waterVertices[i + 9], waterVertices[i + 10]);
 			n = generateNormal(p1, p2, p3);
-			water_normals.push_back(n.x);
-			water_normals.push_back(n.y);
-			water_normals.push_back(n.z);
-			water_normals.push_back(n.w);
+			waterNormals.push_back(n.x);
+			waterNormals.push_back(n.y);
+			waterNormals.push_back(n.z);
+			waterNormals.push_back(n.w);
 		}
 	}
 	else
 	{
-		for (int x = 1; x < water_vertices.size(); x += 4) // modify current vertices list
-			water_vertices[x] = heightMap[int(water_vertices[x - 1] / gridSpacing) * gridSize + int(water_vertices[x + 1] / gridSpacing)];
-		p2 = glm::vec3(water_vertices[0], water_vertices[1], water_vertices[2]);
-		p3 = glm::vec3(water_vertices[4], water_vertices[5], water_vertices[6]);
-		for (int i = 0; i < water_vertices.size() - 8; i += 4) // modify normals for water
+		for (int x = 1; x < waterVertices.size(); x += 4) // modify current vertices list
+			waterVertices[x] = heightMap[int(waterVertices[x - 1] / gridSpacing) * gridSize + int(waterVertices[x + 1] / gridSpacing)];
+		p2 = glm::vec3(waterVertices[0], waterVertices[1], waterVertices[2]);
+		p3 = glm::vec3(waterVertices[4], waterVertices[5], waterVertices[6]);
+		for (int i = 0; i < waterVertices.size() - 8; i += 4) // modify normals for water
 		{
 			p1 = p2;
 			p2 = p3;
-			p3 = glm::vec3(water_vertices[i + 8], water_vertices[i + 9], water_vertices[i + 10]);
+			p3 = glm::vec3(waterVertices[i + 8], waterVertices[i + 9], waterVertices[i + 10]);
 			n = generateNormal(p1, p2, p3);
-			water_normals[i] = n.x;
-			water_normals[i + 1] = n.y;
-			water_normals[i + 2] = n.z; // n.w is not needed
+			waterNormals[i] = n.x;
+			waterNormals[i + 1] = n.y;
+			waterNormals[i + 2] = n.z; // n.w is not needed
 		}
 	}
 }
 
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
 	if (action == GLFW_PRESS) {
-		if (key == GLFW_KEY_LEFT) speed_x = PI / 8 ; // turn around
-		if (key == GLFW_KEY_RIGHT) speed_x = -PI / 8 ;
+		if (key == GLFW_KEY_LEFT) isTurning = 1;
+		if (key == GLFW_KEY_RIGHT) isTurning = -1;
 		if (key == GLFW_KEY_UP) // oar animation, move
 		{
-			speed_p = PI * 200;
-			wioslowanie = 1;
+			isMoving = 1;
+			oarAnimSpeed = PI / 8;
 		}
 		if (key == GLFW_KEY_DOWN)
 		{
-			speed_p = -PI * 100;
-			wioslowanie = 2;
+			isMoving = -1;
+			oarAnimSpeed = -PI / 8;
 		}
-		if (key == GLFW_KEY_Z) kolysanie = !kolysanie; // toggle animation
-		if (key == GLFW_KEY_X) wioslowanie = wioslowanie = 1;
-		if (key == GLFW_KEY_C) wioslowanie = wioslowanie = 2;
-		if (key == GLFW_KEY_V) wioslowanie = wioslowanie = 0;
-		if (key == GLFW_KEY_A) speed_cx = PI / 2.0; // camera rotation
-		if (key == GLFW_KEY_D) speed_cx = -PI / 2.0;
-		if (key == GLFW_KEY_W) speed_cy = PI * 2.0; // raise or lower camera
-		if (key == GLFW_KEY_S) speed_cy = -PI * 2.0;
+		if (key == GLFW_KEY_Z) shipSwayAnimate = !shipSwayAnimate; // toggle animation
+		if (key == GLFW_KEY_X) oarAnimate = !oarAnimate;
+		if (key == GLFW_KEY_A) cameraRotateSpeed = PI / 4.0; // camera rotation
+		if (key == GLFW_KEY_D) cameraRotateSpeed = -PI / 4.0;
+		if (key == GLFW_KEY_W) cameraMoveSpeed = PI * 2.0; // raise or lower camera
+		if (key == GLFW_KEY_S) cameraMoveSpeed = -PI * 1.0;
 		if (key == GLFW_KEY_O) // change water amplitude
 		{
 			waveAmplitude += 0.1f;
@@ -257,32 +265,27 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 		}
 		if (key == GLFW_KEY_I) // water speed
 		{
-			speed_water += 1.0f;
-			if (speed_water > 40.0f) speed_water = 40.0f;
+			waterSpeed += 1.0f;
+			if (waterSpeed > 40.0f) waterSpeed = 40.0f;
 		}
 		if (key == GLFW_KEY_K)
 		{
-			speed_water -= 1.0f;
-			if (speed_water < 1.0f) speed_water = 1.0f;
+			waterSpeed -= 1.0f;
+			if (waterSpeed < 1.0f) waterSpeed = 1.0f;
 		}
 	}
 	if (action == GLFW_RELEASE) {
-		if (key == GLFW_KEY_UP)
+		if (key == GLFW_KEY_UP || key == GLFW_KEY_DOWN)
 		{
-			speed_p = 0;
-			wioslowanie = 0;
+			isMoving = 0;
+			oarAnimSpeed = 0;
 		}
-		if (key == GLFW_KEY_DOWN)
-		{
-			speed_p = 0;
-			wioslowanie = 0;
-		}
-		if (key == GLFW_KEY_LEFT) speed_x = 0;
-		if (key == GLFW_KEY_RIGHT) speed_x = 0;
-		if (key == GLFW_KEY_A) speed_cx = 0;
-		if (key == GLFW_KEY_D) speed_cx = 0;
-		if (key == GLFW_KEY_W) speed_cy = 0;
-		if (key == GLFW_KEY_S) speed_cy = 0;
+		if (key == GLFW_KEY_LEFT) isTurning = 0;
+		if (key == GLFW_KEY_RIGHT) isTurning = 0;
+		if (key == GLFW_KEY_A) cameraRotateSpeed = 0;
+		if (key == GLFW_KEY_D) cameraRotateSpeed = 0;
+		if (key == GLFW_KEY_W) cameraMoveSpeed = 0;
+		if (key == GLFW_KEY_S) cameraMoveSpeed = 0;
 	}
 }
 
@@ -302,7 +305,7 @@ void initOpenGLProgram(GLFWwindow* window) {
 	glfwSetWindowSizeCallback(window, windowResizeCallback);
 	glfwSetKeyCallback(window, keyCallback);
 	sp = new ShaderProgram("v_simplest.glsl", NULL, "f_simplest.glsl");
-	texWater = readTexture("morze9.png");
+	tex_water = readTexture("rough-sea-4096x4096.png");
 	tex_s1 = readTexture("T_Ship08_WoodPlain_01_Diffuse.png");
 	tex_s2 = readTexture("T_Ship08_Rope_02_Diffuse.png");
 	tex_s3 = readTexture("T_Ship08_Metal_Diffuse.png");
@@ -317,18 +320,18 @@ void initOpenGLProgram(GLFWwindow* window) {
 	tex_s12 = readTexture("T_Ship08_CannonWheels_Diffuse.png");
 	tex_s13 = readTexture("T_Ship08_CannonSides_Diffuse.png");
 	tex_s14 = readTexture("T_Ship08_CannonRope_Diffuse.png");
-	texLighthouse = readTexture("lighthouse_DefaultMaterial_BaseColor.png");
-	tex_gora = readTexture("gora.png");
-	tex_chmura = readTexture("chmura.png");
-	res = another_parse_from_obj("Ship08.obj", vertices, uvs, normals, number_vertex); // ship model
+	tex_lighthouse = readTexture("lighthouse_DefaultMaterial_BaseColor.png");
+	tex_iceberg = readTexture("gora.png");
+	tex_cloud = readTexture("chmura.png");
+	res = another_parse_from_obj("Ship08.obj", shipVertices, shipUvs, shipNormals, shipNumber_vertex); // ship model
 	modelShip = glm::scale(modelShip, glm::vec3(0.005f, 0.005f, 0.005f));
 	modelShip = glm::translate(modelShip, glm::vec3(0.0f, -4.3f * 200, 100.0f * 50));
 	modelShip = glm::rotate(modelShip, PI / 2, glm::vec3(0.0f, 1.0f, 0.0f));
-	res = parse_lighthouse("lighthouse.obj", LHvertices, LHuvs, LHnormals, LHnumber_vertex); // lighthouse model
+	res = parse_lighthouse("lighthouse.obj", lighthouseVertices, lighthouseUvs, lighthouseNormals, lighthouseNumber_vertex); // lighthouse model
 	modelLighthouse = glm::scale(modelLighthouse, glm::vec3(0.5f, 0.5f, 0.5f));
 	modelLighthouse = glm::translate(modelLighthouse, glm::vec3(40.0f, -14.0f, 160.0f));
-	res = parse_from_obj("gora_lodowa.obj", vertices_gora, uvs_gora, normals_gora, number_vertex_gora);
-	bool res2 = parse_from_obj("Clouds.obj", vertices_chmura, uvs_chmura, normals_chmura, number_vertex_chmura);
+	res = parse_from_obj("gora_lodowa.obj", icebergVertices, icebergUvs, icebergNormals, icebergNumber_vertex);
+	bool res2 = parse_from_obj("Clouds.obj", cloudVertices, cloudUvs, cloudNormals, cloudNumber_vertex);
 	generateWater(false);
 	std::cout << "Init complete\n";
 }
@@ -338,7 +341,7 @@ void initOpenGLProgram(GLFWwindow* window) {
 void freeOpenGLProgram(GLFWwindow* window) {
 	//************Place any code here that needs to be executed once, after the main loop ends************
 	delete sp;
-	glDeleteTextures(1, &texWater);
+	glDeleteTextures(1, &tex_water);
 	glDeleteTextures(1, &tex_s1);
 	glDeleteTextures(1, &tex_s2);
 	glDeleteTextures(1, &tex_s3);
@@ -353,60 +356,72 @@ void freeOpenGLProgram(GLFWwindow* window) {
 	glDeleteTextures(1, &tex_s12);
 	glDeleteTextures(1, &tex_s13);
 	glDeleteTextures(1, &tex_s14);
-	glDeleteTextures(1, &texShip1);
-	glDeleteTextures(1, &texShip2);
-	glDeleteTextures(1, &texLighthouse);
-	glDeleteTextures(1, &tex_gora);
-	glDeleteTextures(1, &tex_chmura);
+	glDeleteTextures(1, &tex_lighthouse);
+	glDeleteTextures(1, &tex_iceberg);
+	glDeleteTextures(1, &tex_cloud);
 }
 
-void drawWater() {
-	glEnableVertexAttribArray(sp->a("vertex"));
-	glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, GL_FALSE, 0, &water_vertices[0]);
-	glEnableVertexAttribArray(sp->a("normal"));
-	glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, GL_FALSE, 0, &water_normals[0]);
-	glEnableVertexAttribArray(sp->a("texCoord0"));
-	glVertexAttribPointer(sp->a("texCoord0"), 2, GL_FLOAT, false, 0, &water_textures[0]);
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, texWater);
-	glUniform1i(sp->u("textureMap0"), 0);
+float detectOcean() // for snapping ship position to the water level below its center point
+{
+	float conv_x = shipTrackX; // -1600 -> 1600    0 - 1000 j
+	float conv_y = shipTrackY; // -1600 -> 1600    0 - 1000 i
+	conv_x = (-conv_x) / 159.0 * 50 + 500 + waterOffset / gridSpacing;
+	conv_y = (conv_y) / 159.0 * 50 + 500 + waterOffset / gridSpacing;
+	conv_y = -sin(0.1f * conv_y + 0.5) * cos(0.1f * conv_x + 0.5) * waveAmplitude;
+	return conv_y;
+}
 
-	glDrawArrays(GL_TRIANGLES, 0, water_vertices.size() / 4);
+void drawIceberg()
+{
+	glEnableVertexAttribArray(sp->a("vertex")); //Enable sending data to the attribute vertex
+	glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, false, 0, &icebergVertices[0]); //Specify source of the data for the attribute vertex
+	glEnableVertexAttribArray(sp->a("normal")); //Enable sending data to the attribute vertex
+	glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, false, 0, &icebergNormals[0]); //Specify source of the data for the attribute vertex
+	glEnableVertexAttribArray(sp->a("texCoord0"));
+	glVertexAttribPointer(sp->a("texCoord0"), 2, GL_FLOAT, false, 0, &icebergUvs[0]);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, tex_iceberg);
+	glUniform1i(sp->u("textureMap0"), 0);
+	glDrawArrays(GL_TRIANGLES, 0, icebergNumber_vertex[0]);
 	glDisableVertexAttribArray(sp->a("texCoord0"));
-	glDisableVertexAttribArray(sp->a("vertex"));
+	glDisableVertexAttribArray(sp->a("vertex")); //Disable sending data to the attribute vertex
 	glDisableVertexAttribArray(sp->a("normal"));
 }
 
-float detectOcean()
+void drawCloud()
 {
-	float conv_x = pos_x; // -1600 -> 1600    0 - 1000 j
-	float conv_y = pos_y; // -1600 -> 1600    0 - 1000 i
-	conv_x = (-conv_x) / 159.0 * 50 + 500 + wateroffset / gridSpacing;
-	conv_y = (conv_y) / 159.0 * 50 + 500 + wateroffset / gridSpacing;
-	conv_y = -sin(0.1f * conv_y + 0.5) * cos(0.1f * conv_x + 0.5) * waveAmplitude;
-	return conv_y; // Snap ship position to the water level below its center point
+	glEnableVertexAttribArray(sp->a("vertex")); //Enable sending data to the attribute vertex
+	glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, false, 0, &cloudVertices[0]); //Specify source of the data for the attribute vertex
+	glEnableVertexAttribArray(sp->a("normal")); //Enable sending data to the attribute vertex
+	glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, false, 0, &cloudNormals[0]); //Specify source of the data for the attribute vertex
+	glEnableVertexAttribArray(sp->a("texCoord0"));
+	glVertexAttribPointer(sp->a("texCoord0"), 2, GL_FLOAT, false, 0, &cloudUvs[0]);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, tex_cloud);
+	glUniform1i(sp->u("textureMap0"), 0);
+	glDrawArrays(GL_TRIANGLES, 0, cloudNumber_vertex[0]);
+	glDisableVertexAttribArray(sp->a("texCoord0"));
+	glDisableVertexAttribArray(sp->a("vertex")); //Disable sending data to the attribute vertex
+	glDisableVertexAttribArray(sp->a("normal"));
 }
 
 //Drawing procedure
-void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, float angle_f, float angle_p, float wateroffset, float angle_wioslo, float angle_gora) {
+void drawScene(GLFWwindow* window, float shipRotateAngle, float shipSwayAngle, float shipMoveDistance, float wateroffset, float oarAngle) {
 	//************Place any code here that draws something inside the window******************l
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	glm::mat4 V = glm::lookAt(
-		glm::vec3(0.0f, angle_cy, 0.0f),
-		glm::vec3(5.0f * sin(angle_cx), angle_cy > 0.0f ? 0.0f : angle_cy * 0.9, 5.0f * cos(angle_cx)),
+		glm::vec3(0.0f, cameraMovePosition, 0.0f),
+		glm::vec3(5.0f * sin(cameraRotateAngle), cameraMovePosition > 0.0f ? 0.0f : cameraMovePosition * 0.9, 5.0f * cos(cameraRotateAngle)),
 		glm::vec3(0.0f, 1.0f, 0.0f)); //compute view matrix
-	glm::mat4 P = glm::perspective(50.0f * PI / 180.0f, aspectRatio, 1.0f, 140.0f); //compute projection matrix
+	glm::mat4 P = glm::perspective(50.0f * PI / 180.0f, aspectRatio, 1.0f, renderDistance); //compute projection matrix
+	glm::mat4 M = glm::mat4(1.0f);
 
 	sp->use();//activate shading program
 	//Send parameters to graphics card
 	glUniformMatrix4fv(sp->u("P"), 1, false, glm::value_ptr(P));
 	glUniformMatrix4fv(sp->u("V"), 1, false, glm::value_ptr(V));
-
-	glm::mat4 M = glm::mat4(1.0f);
-	glm::mat4 Mw = glm::translate(M, glm::vec3(wateroffset - gridSize * gridSpacing * 0.5, -5.0f, wateroffset - gridSize * gridSpacing * 0.5));
-	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Mw));
 
 	// light parameters
 	glUniform4f(sp->u("lp1"), 0.0f, 50.0f, 0.0f, 1.0f); // position
@@ -417,232 +432,179 @@ void drawScene(GLFWwindow* window, float angle_x, float angle_y, float angle_k, 
 	glUniform4f(sp->u("ks2"), 1.0f, 1.0f, 0.5f, 1.0f);
 
 
-	drawWater();
 
+	//// water
+	glm::mat4 Mw = glm::translate(M, glm::vec3(wateroffset - gridSize * gridSpacing * 0.5, -5.0f, wateroffset - gridSize * gridSpacing * 0.5));
+	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Mw));
+	glEnableVertexAttribArray(sp->a("vertex")); // pass vertices, normals, uvs
+	glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, GL_FALSE, 0, &waterVertices[0]);
+	glEnableVertexAttribArray(sp->a("normal"));
+	glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, GL_FALSE, 0, &waterNormals[0]);
+	glEnableVertexAttribArray(sp->a("texCoord0"));
+	glVertexAttribPointer(sp->a("texCoord0"), 2, GL_FLOAT, false, 0, &waterUvs[0]);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, tex_water);
+	glUniform1i(sp->u("textureMap0"), 0);
+	glDrawArrays(GL_TRIANGLES, 0, waterVertices.size() / 4); //Draw the object
+	glDisableVertexAttribArray(sp->a("texCoord0")); // finish drawing
+	glDisableVertexAttribArray(sp->a("vertex"));
+	glDisableVertexAttribArray(sp->a("normal"));
+
+
+
+	//// ship oars
 	//M = glm::mat4(1.0f);
 	glm::mat4 Ms = modelShip;
-	Ms = glm::rotate(Ms, angle_y, glm::vec3(1.0f, 0.0f, 0.0f)); //Compute model matrix
-	Ms = glm::rotate(Ms, angle_x, glm::vec3(0.0f, 1.0f, 0.0f)); //Compute model matrix
-	Ms = glm::translate(Ms, glm::vec3(0.0f, 0.0f, angle_p));
+	Ms = glm::rotate(Ms, shipRotateAngle, glm::vec3(0.0f, 1.0f, 0.0f)); //Compute model matrix
+	Ms = glm::translate(Ms, glm::vec3(0.0f, 0.0f, shipMoveDistance));
 	modelShip = Ms;
 	Ms = glm::translate(Ms, glm::vec3(0.0f, detectOcean() * 200, 0.0f));
 
-	if (kolysanie) Ms = glm::rotate(Ms, angle_f, glm::vec3(1.0f, 0.0f, 0.0f));
+	if (shipSwayAnimate) Ms = glm::rotate(Ms, shipSwayAngle, glm::vec3(1.0f, 0.0f, 0.0f));
 
-	glm::mat4 Mo = Ms; //Mo=Macierz modelu oars (wiosel statku)
-	if (wioslowanie == 1)
+	glm::mat4 Mo = Ms; //Mo=Oar rotation matrix
+	if (oarAnimate)
 	{
-		Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, -1.0f, -1.0f));
-		Mo = glm::rotate(Mo, 2 * wioslo_height / 3, glm::vec3(0.0f, 1.0f, 0.0f));
-		if (stan == 0)
-		{
-			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, 1.0f, 1.0f));
-		}
-		else if (stan == 1)
-		{
-			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, 1.0f, 1.0f));
-			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, -1.0f, 1.0f));
-		}
-		else if (stan == 2)
-		{
-			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, 1.0f, 1.0f));
-			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, -1.0f, 1.0f));
-			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, -1.0f, -1.0f));
-		}
-		else
-		{
-			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, 1.0f, 1.0f));
-			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, -1.0f, 1.0f));
-			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, -1.0f, -1.0f));
-			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, 1.0f, -1.0f));
-		}
-	}
-	if (wioslowanie == 2)
-	{
-		Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, 1.0f, -1.0f));
-		Mo = glm::rotate(Mo, 2 * wioslo_height / 3, glm::vec3(0.0f, -1.0f, 0.0f));
-		if (stan == 0)
-		{
-			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, -1.0f, 1.0f));
-		}
-		else if (stan == 1)
-		{
-			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, -1.0f, 1.0f));
-			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, 1.0f, 1.0f));
-		}
-		else if (stan == 2)
-		{
-			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, -1.0f, 1.0f));
-			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, 1.0f, 1.0f));
-			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, 1.0f, -1.0f));
-		}
-		else
-		{
-			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, -1.0f, 1.0f));
-			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, 1.0f, 1.0f));
-			Mo = glm::rotate(Mo, wioslo_height, glm::vec3(0.0f, 1.0f, -1.0f));
-			Mo = glm::rotate(Mo, angle_wioslo, glm::vec3(0.0f, -1.0f, -1.0f));
-		}
+		Mo = glm::rotate(Mo, oarLoopTarget, glm::vec3(0.0f, -1.0f, -1.0f));
+		Mo = glm::rotate(Mo, 2 * oarLoopTarget / 3, glm::vec3(0.0f, 1.0f, 0.0f));
+		if (oarAnimState >= 1) Mo = glm::rotate(Mo, oarLoopTarget, glm::vec3(0.0f, 1.0f, 1.0f));
+		if (oarAnimState >= 2) Mo = glm::rotate(Mo, oarLoopTarget, glm::vec3(0.0f, -1.0f, 1.0f));
+		if (oarAnimState >= 3) Mo = glm::rotate(Mo, oarLoopTarget, glm::vec3(0.0f, -1.0f, -1.0f));
+		if (oarAnimState == 0) Mo = glm::rotate(Mo, oarAngle, glm::vec3(0.0f, 1.0f, 1.0f));
+		else if (oarAnimState == 1) Mo = glm::rotate(Mo, oarAngle, glm::vec3(0.0f, -1.0f, 1.0f));
+		else if (oarAnimState == 2) Mo = glm::rotate(Mo, oarAngle, glm::vec3(0.0f, -1.0f, -1.0f));
+		else if (oarAnimState == 3) Mo = glm::rotate(Mo, oarAngle, glm::vec3(0.0f, 1.0f, -1.0f));
 	}
 
 	int vertex_sum = 0;
-	GLuint textures[] = { tex_s1,tex_s2,tex_s3,tex_s4,tex_s5,tex_s6,tex_s7,tex_s8,tex_s9,tex_s10,tex_s11,tex_s12,tex_s13,tex_s14 };
-
+	GLuint shipTextures[] = { tex_s1,tex_s2,tex_s3,tex_s4,tex_s5,tex_s6,tex_s7,tex_s8,tex_s9,tex_s10,tex_s11,tex_s12,tex_s13,tex_s14 };
 	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Ms));
-
 	for (int j = 0; j < 14; j++)
 	{
 		glEnableVertexAttribArray(sp->a("vertex")); //Enable sending data to the attribute vertex
-		glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, false, 0, &vertices[vertex_sum * 4]); //Specify source of the data for the attribute vertex
+		glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, false, 0, &shipVertices[vertex_sum * 4]); //Specify source of the data for the attribute vertex
 		glEnableVertexAttribArray(sp->a("normal")); //Enable sending data to the attribute vertex
-		glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, false, 0, &normals[vertex_sum * 4]); //Specify source of the data for the attribute vertex
+		glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, false, 0, &shipNormals[vertex_sum * 4]); //Specify source of the data for the attribute vertex
 		glEnableVertexAttribArray(sp->a("texCoord0"));
-		glVertexAttribPointer(sp->a("texCoord0"), 2, GL_FLOAT, false, 0, &uvs[vertex_sum * 2]);
+		glVertexAttribPointer(sp->a("texCoord0"), 2, GL_FLOAT, false, 0, &shipUvs[vertex_sum * 2]);
 		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, textures[j]);
+		glBindTexture(GL_TEXTURE_2D, shipTextures[j]);
 		glUniform1i(sp->u("textureMap0"), 0);
-
-		glDrawArrays(GL_TRIANGLES, 0, number_vertex[j]); //Draw the object
+		glDrawArrays(GL_TRIANGLES, 0, shipNumber_vertex[j]); //Draw the object
 		glDisableVertexAttribArray(sp->a("texCoord0"));
 		glDisableVertexAttribArray(sp->a("vertex")); //Disable sending data to the attribute vertex
 		glDisableVertexAttribArray(sp->a("normal"));
-
-
-		vertex_sum = vertex_sum + number_vertex[j];
+		vertex_sum = vertex_sum + shipNumber_vertex[j];
 	}
 
+	//// ship
 	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Mo));
-
 	glEnableVertexAttribArray(sp->a("vertex")); //Enable sending data to the attribute vertex
-	glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, false, 0, &vertices[vertex_sum * 4]); //Specify source of the data for the attribute vertex
+	glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, false, 0, &shipVertices[vertex_sum * 4]); //Specify source of the data for the attribute vertex
 	glEnableVertexAttribArray(sp->a("normal")); //Enable sending data to the attribute vertex
-	glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, false, 0, &normals[vertex_sum * 4]); //Specify source of the data for the attribute vertex
+	glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, false, 0, &shipNormals[vertex_sum * 4]); //Specify source of the data for the attribute vertex
 	glEnableVertexAttribArray(sp->a("texCoord0"));
-	glVertexAttribPointer(sp->a("texCoord0"), 2, GL_FLOAT, false, 0, &uvs[vertex_sum * 2]);
+	glVertexAttribPointer(sp->a("texCoord0"), 2, GL_FLOAT, false, 0, &shipUvs[vertex_sum * 2]);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, tex_s4);
 	glUniform1i(sp->u("textureMap0"), 0);
-
-	glDrawArrays(GL_TRIANGLES, 0, number_vertex[14]);
+	glDrawArrays(GL_TRIANGLES, 0, shipNumber_vertex[14]);
 	glDisableVertexAttribArray(sp->a("texCoord0"));
 	glDisableVertexAttribArray(sp->a("vertex")); //Disable sending data to the attribute vertex
 	glDisableVertexAttribArray(sp->a("normal"));
 
 
-
-
-
+	//// lighthouse
 	glm::mat4 Ml = modelLighthouse;
-
 	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Ml)); // lighthouse
-
 	glEnableVertexAttribArray(sp->a("vertex")); //Enable sending data to the attribute vertex
-	glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, false, 0, &LHvertices[0]); //Specify source of the data for the attribute vertex
+	glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, false, 0, &lighthouseVertices[0]); //Specify source of the data for the attribute vertex
 	glEnableVertexAttribArray(sp->a("normal")); //Enable sending data to the attribute vertex
-	glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, false, 0, &LHnormals[0]); //Specify source of the data for the attribute vertex
+	glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, false, 0, &lighthouseNormals[0]); //Specify source of the data for the attribute vertex
 	glEnableVertexAttribArray(sp->a("texCoord0"));
-	glVertexAttribPointer(sp->a("texCoord0"), 2, GL_FLOAT, false, 0, &LHuvs[0]);
+	glVertexAttribPointer(sp->a("texCoord0"), 2, GL_FLOAT, false, 0, &lighthouseUvs[0]);
 	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, texLighthouse);
+	glBindTexture(GL_TEXTURE_2D, tex_lighthouse);
 	glUniform1i(sp->u("textureMap0"), 0);
-
-	glDrawArrays(GL_TRIANGLES, 0, LHnumber_vertex[0]);
+	glDrawArrays(GL_TRIANGLES, 0, lighthouseNumber_vertex[0]);
 	glDisableVertexAttribArray(sp->a("texCoord0"));
 	glDisableVertexAttribArray(sp->a("vertex")); //Disable sending data to the attribute vertex
 	glDisableVertexAttribArray(sp->a("normal"));
 
 
-
-
+	//// icebergs: iceberg 1
 	glm::mat4 Mg = M;
-	Mg = glm::translate(Mg, glm::vec3(15.0f, -9.0f, 30.0f));
+	Mg = glm::translate(Mg, glm::vec3(25.0f, -9.0f, 30.0f));
 	Mg = glm::scale(Mg, glm::vec3(8.0f, 8.0f, 8.0f));
-	Mg = glm::translate(Mg, glm::vec3(-angle_gora / 4, 0.0f, angle_gora / 2));
-	Mg = glm::rotate(Mg, angle_gora, glm::vec3(0.0f, 1.0f, 0.0f));
+	Mg = glm::rotate(Mg, icebergAngle[0], glm::vec3(0.0f, 1.0f, 0.0f));
+	Mg = glm::translate(Mg, glm::vec3(-icebergAngle[0] / 4, 0.0f, -icebergAngle[0] / 2));
 	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Mg));
-
-	glEnableVertexAttribArray(sp->a("vertex")); //Enable sending data to the attribute vertex
-	glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, false, 0, &vertices_gora[0]); //Specify source of the data for the attribute vertex
-	glEnableVertexAttribArray(sp->a("normal")); //Enable sending data to the attribute vertex
-	glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, false, 0, &normals_gora[0]); //Specify source of the data for the attribute vertex
-	glEnableVertexAttribArray(sp->a("texCoord0"));
-	glVertexAttribPointer(sp->a("texCoord0"), 2, GL_FLOAT, false, 0, &uvs_gora[0]);
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, tex_gora);
-	glUniform1i(sp->u("textureMap0"), 0);
-
-	glDrawArrays(GL_TRIANGLES, 0, number_vertex_gora[0]);
-	glDisableVertexAttribArray(sp->a("texCoord0"));
-	glDisableVertexAttribArray(sp->a("vertex")); //Disable sending data to the attribute vertex
-	glDisableVertexAttribArray(sp->a("normal"));
-
-
+	drawIceberg();
+	//// iceberg 2
 	glm::mat4 Mg2 = M;
-	Mg2 = glm::translate(Mg2, glm::vec3(40.0f, -9.0f, 50.0f));
+	Mg2 = glm::translate(Mg2, glm::vec3(-50.0f, -9.0f, 50.0f));
 	Mg2 = glm::scale(Mg2, glm::vec3(8.0f, 8.0f, 8.0f));
-	Mg2 = glm::translate(Mg2, glm::vec3(-angle_gora / 4, 0.0f, angle_gora / 2));
-	Mg2 = glm::rotate(Mg2, angle_gora, glm::vec3(0.0f, 1.0f, 0.0f));
+	Mg2 = glm::rotate(Mg2, icebergAngle[1], glm::vec3(0.0f, 1.0f, 0.0f));
+	Mg2 = glm::translate(Mg2, glm::vec3(-icebergAngle[1] / 4, 0.0f, -icebergAngle[1] / 2));
+	Mg2 = glm::rotate(Mg2, -0.1f * PI, glm::vec3(0.0f, 1.0f, 0.0f));
 	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Mg2));
+	drawIceberg();
+	//// iceberg 3
+	glm::mat4 Mg3 = M;
+	Mg3 = glm::translate(Mg3, glm::vec3(40.0f, -9.0f, -25.0f));
+	Mg3 = glm::scale(Mg3, glm::vec3(8.0f, 8.0f, 8.0f));
+	Mg3 = glm::rotate(Mg3, icebergAngle[1], glm::vec3(0.0f, 1.0f, 0.0f));
+	Mg3 = glm::translate(Mg3, glm::vec3(-icebergAngle[2] / 4, 0.0f, -icebergAngle[2] / 2));
+	Mg3 = glm::rotate(Mg3, 0.03f * PI, glm::vec3(0.0f, 1.0f, 0.0f));
+	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Mg3));
+	drawIceberg();
+	//// iceberg 4
+	glm::mat4 Mg4 = M;
+	Mg4 = glm::translate(Mg4, glm::vec3(-5.0f, -9.0f, -70.0f));
+	Mg4 = glm::scale(Mg4, glm::vec3(8.0f, 8.0f, 8.0f));
+	Mg4 = glm::rotate(Mg4, icebergAngle[1], glm::vec3(0.0f, 1.0f, 0.0f));
+	Mg4 = glm::translate(Mg4, glm::vec3(-icebergAngle[3] / 4, 0.0f, -icebergAngle[3] / 2));
+	Mg4 = glm::rotate(Mg4, 0.1f * PI, glm::vec3(0.0f, 1.0f, 0.0f));
+	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Mg4));
+	drawIceberg();
 
-	glEnableVertexAttribArray(sp->a("vertex")); //Enable sending data to the attribute vertex
-	glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, false, 0, &vertices_gora[0]); //Specify source of the data for the attribute vertex
-	glEnableVertexAttribArray(sp->a("normal")); //Enable sending data to the attribute vertex
-	glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, false, 0, &normals_gora[0]); //Specify source of the data for the attribute vertex
-	glEnableVertexAttribArray(sp->a("texCoord0"));
-	glVertexAttribPointer(sp->a("texCoord0"), 2, GL_FLOAT, false, 0, &uvs_gora[0]);
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, tex_gora);
-	glUniform1i(sp->u("textureMap0"), 0);
 
-	glDrawArrays(GL_TRIANGLES, 0, number_vertex_gora[0]);
-	glDisableVertexAttribArray(sp->a("texCoord0"));
-	glDisableVertexAttribArray(sp->a("vertex")); //Disable sending data to the attribute vertex
-	glDisableVertexAttribArray(sp->a("normal"));
-
-
-
+	//// clouds: cloud 1
 	glm::mat4 Mch = M;
-	Mch = glm::translate(Mch, glm::vec3(50.0f, 30.0f, 140.0f));
-	Mch = glm::scale(Mch, glm::vec3(4.0f, 4.0f, 4.0f));
+	Mch = glm::rotate(Mch, cloudAngle[0], glm::vec3(0.0f, 1.0f, 0.0f));
+	Mch = glm::translate(Mch, glm::vec3(0.0f, 20.0f, 110.0f));
+	Mch = glm::scale(Mch, glm::vec3(3.0f, 3.0f, 3.0f));
 	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Mch));
-
-	glEnableVertexAttribArray(sp->a("vertex")); //Enable sending data to the attribute vertex
-	glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, false, 0, &vertices_chmura[0]); //Specify source of the data for the attribute vertex
-	glEnableVertexAttribArray(sp->a("normal")); //Enable sending data to the attribute vertex
-	glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, false, 0, &normals_chmura[0]); //Specify source of the data for the attribute vertex
-	glEnableVertexAttribArray(sp->a("texCoord0"));
-	glVertexAttribPointer(sp->a("texCoord0"), 2, GL_FLOAT, false, 0, &uvs_chmura[0]);
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, tex_chmura);
-	glUniform1i(sp->u("textureMap0"), 0);
-
-	glDrawArrays(GL_TRIANGLES, 0, number_vertex_chmura[0]);
-	glDisableVertexAttribArray(sp->a("texCoord0"));
-	glDisableVertexAttribArray(sp->a("vertex")); //Disable sending data to the attribute vertex
-	glDisableVertexAttribArray(sp->a("normal"));
-
-
+	drawCloud();
+	//// cloud 2
 	glm::mat4 Mch2 = M;
-	Mch2 = glm::translate(Mch2, glm::vec3(-50.0f, 30.0f, 140.0f));
-	Mch2 = glm::scale(Mch2, glm::vec3(4.0f, 4.0f, 4.0f));
-	Mch2 = glm::rotate(Mch2, PI, glm::vec3(0.0f, 1.0f, 0.0f));
+	Mch2 = glm::rotate(Mch2, cloudAngle[1], glm::vec3(0.0f, 1.0f, 0.0f));
+	Mch2 = glm::translate(Mch2, glm::vec3(0.0f, 18.0f, 120.0f));
+	Mch2 = glm::scale(Mch2, glm::vec3(2.5f, 2.5f, 2.5f));
 	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Mch2));
-
-	glEnableVertexAttribArray(sp->a("vertex")); //Enable sending data to the attribute vertex
-	glVertexAttribPointer(sp->a("vertex"), 4, GL_FLOAT, false, 0, &vertices_chmura[0]); //Specify source of the data for the attribute vertex
-	glEnableVertexAttribArray(sp->a("normal")); //Enable sending data to the attribute vertex
-	glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, false, 0, &normals_chmura[0]); //Specify source of the data for the attribute vertex
-	glEnableVertexAttribArray(sp->a("texCoord0"));
-	glVertexAttribPointer(sp->a("texCoord0"), 2, GL_FLOAT, false, 0, &uvs_chmura[0]);
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, tex_chmura);
-	glUniform1i(sp->u("textureMap0"), 0);
-
-	glDrawArrays(GL_TRIANGLES, 0, number_vertex_chmura[0]);
-	glDisableVertexAttribArray(sp->a("texCoord0"));
-	glDisableVertexAttribArray(sp->a("vertex")); //Disable sending data to the attribute vertex
-	glDisableVertexAttribArray(sp->a("normal"));
-
+	drawCloud();
+	//// cloud 3
+	glm::mat4 Mch3 = M;
+	Mch3 = glm::rotate(Mch3, cloudAngle[2], glm::vec3(0.0f, 1.0f, 0.0f));
+	Mch3 = glm::translate(Mch3, glm::vec3(0.0f, 22.0f, 100.0f));
+	Mch3 = glm::scale(Mch3, glm::vec3(3.5f, 3.5f, 3.5f));
+	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Mch3));
+	drawCloud();
+	//// cloud 4
+	glm::mat4 Mch4 = M;
+	Mch4 = glm::rotate(Mch4, cloudAngle[3], glm::vec3(0.0f, 1.0f, 0.0f));
+	Mch4 = glm::translate(Mch4, glm::vec3(0.0f, 21.0f, 105.0f));
+	Mch4 = glm::scale(Mch4, glm::vec3(3.25f, 3.25f, 3.25f));
+	Mch4 = glm::rotate(Mch4, PI, glm::vec3(0.0f, 0.0f, 1.0f));
+	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Mch4));
+	drawCloud();
+	//// cloud 5
+	glm::mat4 Mch5 = M;
+	Mch5 = glm::rotate(Mch5, cloudAngle[4], glm::vec3(0.0f, 1.0f, 0.0f));
+	Mch5 = glm::translate(Mch5, glm::vec3(0.0f, 19.0f, 115.0f));
+	Mch5 = glm::scale(Mch5, glm::vec3(2.75f, 2.75f, 2.75f));
+	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(Mch5));
+	drawCloud();
 
 
 
@@ -680,57 +642,66 @@ int main(void)
 	initOpenGLProgram(window); //Call initialization procedure
 
 
-	float angle_x = 0; //current rotation angle of the object, x axis
-	float angle_y = 0; //current rotation angle of the object, y axis
-	float angle_k = 0;
-	float angle_f = 0;
-	float angle_p = 0;
-	float time = 0;
-	float angle_wioslo = 0;
-	float angle_gora = 0;
+	float shipRotateAngle = 0; // ship rotation angle, x axis
+	float shipSwayAngle = 0;
+	float shipMoveDistance = 0;
+	float waterTime = 0;
+	float oarAngle = 0;
 	glfwSetTime(0); //Zero the timer
 	//Main application loop
 	while (!glfwWindowShouldClose(window)) //As long as the window shouldnt be closed yet...
 	{
-		angle_x = speed_x * glfwGetTime(); //Add angle by which the object was rotated in the previous iteration
-		angle_y = speed_y * glfwGetTime(); //Add angle by which the object was rotated in the previous iteration
-		angle_k += speed_k * glfwGetTime();
-		angle_p = speed_p * glfwGetTime();
-		angle_gora += speed_gora * glfwGetTime();
-		angle_cx += speed_cx * glfwGetTime();
-		angle_cy += speed_cy * glfwGetTime();
-		if (angle_cy < -3) angle_cy = -3;
-		if (angle_cy > 132) angle_cy = 132;
-		pos_angle += angle_x;
-		pos_x -= speed_p / 50.0 * sin(pos_angle) * glfwGetTime();
-		pos_y -= speed_p / 50.0 * cos(pos_angle) * glfwGetTime();
-		time = glfwGetTime();
-		wateroffset += speed_water * time;
-		time *= speed_water * 9.5 / gridSize;
-		for (float& x : water_textures) x += time;
-		while (wateroffset > gridSize / 40.0) {
-			wateroffset -= gridSize / 20.0;
-			for (float& x : water_textures) x -= 0.504;
-		}
-		angle_f += speed_f * glfwGetTime();
+		cameraRotateAngle += cameraRotateSpeed * glfwGetTime();
+		cameraMovePosition += cameraMoveSpeed * glfwGetTime();
+		if (cameraMovePosition < -3) cameraMovePosition = -3; // position limits on camera Y position
+		if (cameraMovePosition > 132) cameraMovePosition = 132;
 
-		if (wioslowanie)
-		{
-			angle_wioslo += speed_l * glfwGetTime();
-			if (angle_wioslo >= wioslo_height) {
-				angle_wioslo = 0;
-				stan++;
-				stan = stan % 4;
-			}
+
+		if (isMoving == 0 && shipMoveSpeed > 0) shipMoveSpeed = shipMoveSpeed - shipDecel * glfwGetTime() < 0 ? 0 : shipMoveSpeed - shipDecel * glfwGetTime();
+		if (isMoving == 0 && shipMoveSpeed < 0) shipMoveSpeed = shipMoveSpeed + shipDecel * glfwGetTime() > 0 ? 0 : shipMoveSpeed + shipDecel * glfwGetTime();
+		if (isMoving == 1) shipMoveSpeed = shipMoveSpeed + shipAccel * glfwGetTime();
+		if (isMoving == -1) shipMoveSpeed = shipMoveSpeed - shipDecel * glfwGetTime();
+		if (shipMoveSpeed > PI * 200) shipMoveSpeed = PI * 200;
+		if (shipMoveSpeed < -PI * 200) shipMoveSpeed = -PI * 200;
+		if (isTurning != 0) shipRotateSpeed = isTurning * shipMoveSpeed / 1600.0; // turning speed depends on forward momentum
+		else shipRotateSpeed = 0;
+		shipRotateAngle = shipRotateSpeed * glfwGetTime(); //Add angle by which the object was rotated in the previous iteration
+		shipMoveDistance = shipMoveSpeed * glfwGetTime();
+		shipTrackAngle += shipRotateAngle;
+		shipTrackX -= shipMoveSpeed / 50.0 * sin(shipTrackAngle) * glfwGetTime();
+		shipTrackY -= shipMoveSpeed / 50.0 * cos(shipTrackAngle) * glfwGetTime();
+
+
+		for (int i = 0; i < 4; i++) icebergAngle[i] += icebergSpeed * glfwGetTime();
+		for (int i = 0; i < 5; i++) cloudAngle[i] += cloudSpeed[i] * glfwGetTime();
+
+
+		waterTime = glfwGetTime(); //water relies on illusion of movement, the entire object moves in a loop so that vertices need not be modified
+		waterOffset += waterSpeed * waterTime;
+		waterTime *= waterSpeed * 9.5 / gridSize;
+		for (float& x : waterUvs) x += waterTime; // illusion of movement, edits water uvs
+		while (waterOffset > gridSize / 40.0) { // reset position once animatoin loop is done
+			waterOffset -= gridSize / 20.0;
+			for (float& x : waterUvs) x -= 0.504;
 		}
-		if (!wioslowanie)
+
+		shipSwayAngle += shipSwaySpeed * glfwGetTime();
+		if (oarAnimate)
 		{
-			angle_wioslo = 0;
-			stan = 0;
+			oarAngle += oarAnimSpeed * glfwGetTime();
+			if (oarAngle > oarLoopTarget) {
+				oarAngle = 0;
+				oarAnimState = (++oarAnimState) % 4;
+			}
+			if (oarAngle < 0) {
+				oarAngle = oarLoopTarget;
+				oarAnimState--;
+				if (oarAnimState < 0) oarAnimState = 3;
+			}
 		}
 
 		glfwSetTime(0); //Zero the timer
-		drawScene(window, angle_x, angle_y, angle_k, sin(angle_f) / 9.0, angle_p, wateroffset, angle_wioslo, angle_gora); //Execute drawing procedure
+		drawScene(window, shipRotateAngle, sin(shipSwayAngle) / 9.0, shipMoveDistance, waterOffset, oarAngle); //Execute drawing procedure
 		glfwPollEvents(); //Process callback procedures corresponding to the events that took place up to now
 	}
 	freeOpenGLProgram(window);
